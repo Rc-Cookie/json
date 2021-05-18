@@ -5,8 +5,11 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Map;
-import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.Set;
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 import static com.github.rccookie.json.Json.INDENT;
 
@@ -14,18 +17,17 @@ import static com.github.rccookie.json.Json.INDENT;
  * Represents an abstract json object. A json object can hold any
  * type of value, but everything that is not a number, a boolean
  * value or {@code null} will be converted to a string when generating
- * the json string, using {@link Object#toString()}.
+ * the json string, using {@link Object#toString()}. Like json objects
+ * this map does not allow the {@code null} key.
  */
-public class JsonObject extends HashMap<String, Object> implements JsonElement {
+public class JsonObject extends HashMap<String, Object> implements JsonStructure {
 
 
 
     /**
      * Creates a new, empty json object.
      */
-    public JsonObject() {
-
-    }
+    public JsonObject() { }
 
     /**
      * Creates a new json object with the given mappings
@@ -33,7 +35,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonElement {
      * @param copy The map describing the mappings to do.
      */
     public JsonObject(Map<? extends String, ?> copy) {
-        super(copy);
+        super(checkNoNullKeys(copy));
     }
 
     /**
@@ -113,346 +115,231 @@ public class JsonObject extends HashMap<String, Object> implements JsonElement {
 
 
 
+    @Override
+    public Object put(String key, Object value) {
+        return super.put(Objects.requireNonNull(key), value);
+    }
+
+    @Override
+    public void putAll(Map<? extends String, ?> m) {
+        super.putAll(checkNoNullKeys(m));
+    }
+
+    @Override
+    public Object putIfAbsent(String key, Object value) {
+        return super.putIfAbsent(Objects.requireNonNull(key), value);
+    }
+
+    @Override
+    public Object compute(String key, BiFunction<? super String, ? super Object, ?> remappingFunction) {
+        return super.compute(Objects.requireNonNull(key), remappingFunction);
+    }
+
+    @Override
+    public Object computeIfAbsent(String key, Function<? super String, ?> mappingFunction) {
+        return super.computeIfAbsent(Objects.requireNonNull(key), mappingFunction);
+    }
+
+    @Override
+    public Object computeIfPresent(String key, BiFunction<? super String, ? super Object, ?> remappingFunction) {
+        return super.computeIfPresent(Objects.requireNonNull(key), remappingFunction);
+    }
+
+    private static Map<? extends String, ?> checkNoNullKeys(Map<? extends String, ?> m) {
+        m.forEach((k,$) -> Objects.requireNonNull(k));
+        return m;
+    }
+
+
+
     /**
-     * Returns the value associated with the given key. If no value is
-     * associated with this key ({@code null} is a value) a
-     * {@link NoSuchElementException} will be thrown.
-     *
-     * @param key The key to get the value for
-     * @return The value associated with the key
-     * @throws NoSuchElementException If no mapping for the given key exists
-     *                                in this json object
+     * @deprecated Use {@link #get(String)} instead for any json interaction.
+     *             If the "pure" value is needed use {@link #getAnything(String)}.
      */
-    public Object get(String key) throws NoSuchElementException {
-        if(!containsKey(key))
-            throw new NoSuchElementException();
+    @Override
+    @Deprecated
+    public Object get(Object key) {
+        // This method must return the actual value to conform as map. Otherwise
+        // not the object that was mapped would be returned
         return super.get(key);
     }
 
     /**
-     * Returns the json object associated with the given key. If no value is
-     * associated with this key ({@code null} is a value) or the given value
-     * is not a json object, a {@link NoSuchElementException} will be thrown.
+     * Returns the value mapped to the specified key, wrapped in a
+     * {@link JsonElement} with the default value {@code null}. If no mapping
+     * exists for the given key an empty json element will be returned.
+     * <p>This method never returns {@code null}.
      *
      * @param key The key to get the value for
-     * @return The json object associated with the key
-     * @throws NoSuchElementException If no mapping for the given key exists
-     *                                or the value is not a json object
+     * @return A json element as described above
      */
-    public JsonObject getObject(String key) throws NoSuchElementException {
-        try {
-            return (JsonObject) get(key);
-        } catch(ClassCastException e) {
-            throw new NoSuchElementException();
-        }
+    public JsonElement get(String key) {
+        return getOrDefault(key, null);
     }
 
     /**
-     * Returns the json array associated with the given key. If no value is
-     * associated with this key ({@code null} is a value) or the given value
-     * is not a json array, a {@link NoSuchElementException} will be thrown.
+     * Returns the value mapped to the specified key, wrapped in a
+     * {@link JsonElement} with given the default value. If no mapping
+     * exists for the given key an empty json element will be returned.
+     * <p>This method never returns {@code null}.
      *
      * @param key The key to get the value for
-     * @return The json array associated with the key
-     * @throws NoSuchElementException If no mapping for the given key exists
-     *                                or the value is not a json array
+     * @param defaultValue The default value returned if at some point
+     *                     no value is present
+     * @return A json element as described above
      */
-    public JsonArray getArray(String key) throws NoSuchElementException {
-        try {
-            return (JsonArray) get(key);
-        } catch(ClassCastException e) {
-            throw new NoSuchElementException();
-        }
+    public JsonElement getOrDefault(String key, Object defaultValue) {
+        return containsKey(Objects.requireNonNull(key)) ? new JsonElement(super.get(key), defaultValue) : new JsonElement.EmptyJsonElement(defaultValue);
     }
 
     /**
-     * Returns the string associated with the given key. If no value is
-     * associated with this key ({@code null} is a value) or the given value
-     * is not a string, a {@link NoSuchElementException} will be thrown.
+     * Returns the value mapped to the specified key, wrapped in a
+     * {@link JsonElement} with given the default value generator. If no
+     * mapping exists for the given key an empty json element will be
+     * returned.
+     * <p>This method never returns {@code null}.
      *
      * @param key The key to get the value for
-     * @return The string associated with the key
-     * @throws NoSuchElementException If no mapping for the given key exists
-     *                                or the value is not a string
+     * @param defaultGetter A generator that will be used to generate a
+     *                      default value if at some point no value is
+     *                      present and the value is requested
+     * @return A json element as described above
      */
-    public String getString(String key) throws NoSuchElementException {
-        try {
-            return (String) get(key);
-        } catch(ClassCastException e) {
-            throw new NoSuchElementException();
-        }
+    public JsonElement getOrDefaultGet(String key, Supplier<Object> defaultGetter) {
+        return containsKey(Objects.requireNonNull(key)) ? new JsonElement(super.get(key), defaultGetter) : new JsonElement.EmptyJsonElement(defaultGetter);
+    }
+
+
+
+    /**
+     * Returns the value mapped to the given key, or {@code null} if no mapping
+     * exists.
+     *
+     * @param key The key to get the value for
+     * @return The mapped value, or {@code null}
+     */
+    public Object getAnything(String key) {
+        return get(key).asAnything();
     }
 
     /**
-     * Returns the long associated with the given key. If no value is
-     * associated with this key ({@code null} is a value) or the given value
-     * is not a number ({@code null} is not a number), a
-     * {@link NoSuchElementException} will be thrown.
+     * Returns the json object mapped to the given key, or {@code null} if no mapping
+     * exists. If a mapping exists but the given value is not a json object,
+     * a {@link ClassCastException} will be thrown.
      *
      * @param key The key to get the value for
-     * @return The long associated with the key
-     * @throws NoSuchElementException If no mapping for the given key exists
-     *                                or the value is not a number
+     * @return The mapped json object, or {@code null}
      */
-    public long getLong(String key) throws NoSuchElementException {
-        try {
-            return ((Number)get(key)).longValue();
-        } catch(ClassCastException | NullPointerException e) {
-            throw new NoSuchElementException();
-        }
+    public JsonObject getObject(String key) {
+        return get(key).asObject();
     }
 
     /**
-     * Returns the integer associated with the given key. If no value is
-     * associated with this key ({@code null} is a value) or the given value
-     * is not a number ({@code null} is not a number), a
-     * {@link NoSuchElementException} will be thrown.
+     * Returns the json array mapped to the given key, or {@code null} if no mapping
+     * exists. If a mapping exists but the given value is not a json array,
+     * a {@link ClassCastException} will be thrown.
      *
      * @param key The key to get the value for
-     * @return The integer associated with the key
-     * @throws NoSuchElementException If no mapping for the given key exists
-     *                                or the value is not a number
+     * @return The mapped json array, or {@code null}
      */
-    public int getInt(String key) throws NoSuchElementException {
-        try {
-            return ((Number)get(key)).intValue();
-        } catch(ClassCastException | NullPointerException e) {
-            throw new NoSuchElementException();
-        }
+    public JsonArray getArray(String key) {
+        return get(key).asArray();
     }
 
     /**
-     * Returns the short associated with the given key. If no value is
-     * associated with this key ({@code null} is a value) or the given value
-     * is not a number ({@code null} is not a number), a
-     * {@link NoSuchElementException} will be thrown.
+     * Returns the string to the given key, or {@code null} if no mapping
+     * exists. If a mapping exists but the given value is not a string,
+     * a {@link ClassCastException} will be thrown.
      *
      * @param key The key to get the value for
-     * @return The short associated with the key
-     * @throws NoSuchElementException If no mapping for the given key exists
-     *                                or the value is not a number
+     * @return The mapped string, or {@code null}
      */
-    public short getShort(String key) throws NoSuchElementException {
-        try {
-            return ((Number)get(key)).shortValue();
-        } catch(ClassCastException | NullPointerException e) {
-            throw new NoSuchElementException();
-        }
+    public String getString(String key) {
+        return get(key).asString();
     }
 
     /**
-     * Returns the byte associated with the given key. If no value is
-     * associated with this key ({@code null} is a value) or the given value
-     * is not a number ({@code null} is not a number), a
-     * {@link NoSuchElementException} will be thrown.
+     * Returns the long to the given key, or {@code null} if no mapping
+     * exists. If a mapping exists but the given value is not a number,
+     * a {@link ClassCastException} will be thrown.
      *
      * @param key The key to get the value for
-     * @return The byte associated with the key
-     * @throws NoSuchElementException If no mapping for the given key exists
-     *                                or the value is not a number
+     * @return The mapped long, or {@code null}
      */
-    public byte getByte(String key) throws NoSuchElementException {
-        try {
-            return ((Number)get(key)).byteValue();
-        } catch(ClassCastException | NullPointerException e) {
-            throw new NoSuchElementException();
-        }
+    public Long getLong(String key) {
+        return get(key).asLong();
     }
 
     /**
-     * Returns the double associated with the given key. If no value is
-     * associated with this key ({@code null} is a value) or the given value
-     * is not a number ({@code null} is not a number), a
-     * {@link NoSuchElementException} will be thrown.
+     * Returns the integer to the given key, or {@code null} if no mapping
+     * exists. If a mapping exists but the given value is not a number,
+     * a {@link ClassCastException} will be thrown.
      *
      * @param key The key to get the value for
-     * @return The double associated with the key
-     * @throws NoSuchElementException If no mapping for the given key exists
-     *                                or the value is not a number
+     * @return The mapped integer, or {@code null}
      */
-    public double getDouble(String key) throws NoSuchElementException {
-        try {
-            return ((Number)get(key)).doubleValue();
-        } catch(ClassCastException | NullPointerException e) {
-            throw new NoSuchElementException();
-        }
+    public Integer getInt(String key) {
+        return get(key).asInt();
     }
 
     /**
-     * Returns the float associated with the given key. If no value is
-     * associated with this key ({@code null} is a value) or the given value
-     * is not a number ({@code null} is not a number), a
-     * {@link NoSuchElementException} will be thrown.
+     * Returns the short to the given key, or {@code null} if no mapping
+     * exists. If a mapping exists but the given value is not a number,
+     * a {@link ClassCastException} will be thrown.
      *
      * @param key The key to get the value for
-     * @return The float associated with the key
-     * @throws NoSuchElementException If no mapping for the given key exists
-     *                                or the value is not a number
+     * @return The mapped short, or {@code null}
      */
-    public float getFloat(String key) throws NoSuchElementException {
-        try {
-            return ((Number)get(key)).floatValue();
-        } catch(ClassCastException | NullPointerException e) {
-            throw new NoSuchElementException();
-        }
+    public Short getShort(String key) {
+        return get(key).asShort();
     }
 
     /**
-     * Returns the boolean associated with the given key. If no value is
-     * associated with this key ({@code null} is a value) or the given value
-     * is not a boolean ({@code null} is not a boolean), a
-     * {@link NoSuchElementException} will be thrown.
+     * Returns the byte to the given key, or {@code null} if no mapping
+     * exists. If a mapping exists but the given value is not a number,
+     * a {@link ClassCastException} will be thrown.
      *
      * @param key The key to get the value for
-     * @return The boolean associated with the key
-     * @throws NoSuchElementException If no mapping for the given key exists
-     *                                or the value is not a boolean
+     * @return The mapped byte, or {@code null}
      */
-    public boolean getBool(String key) throws NoSuchElementException {
-        try {
-            return (boolean) get(key);
-        } catch(ClassCastException | NullPointerException e) {
-            throw new NoSuchElementException();
-        }
+    public Byte getByte(String key) {
+        return get(key).asByte();
     }
 
     /**
-     * Returns the long associated with the given key. If no value is
-     * associated with this key ({@code null} is a value) or the given value
-     * is not a number ({@code null} IS a number), a
-     * {@link NoSuchElementException} will be thrown.
+     * Returns the double to the given key, or {@code null} if no mapping
+     * exists. If a mapping exists but the given value is not a number,
+     * a {@link ClassCastException} will be thrown.
      *
      * @param key The key to get the value for
-     * @return The long associated with the key
-     * @throws NoSuchElementException If no mapping for the given key exists
-     *                                or the value is not a number
+     * @return The mapped double, or {@code null}
      */
-    public Long getNullableLong(String key) throws NoSuchElementException {
-        try {
-            Object num = get(key);
-            return num != null ? ((Number)num).longValue() : null;
-        } catch(ClassCastException e) {
-            throw new NoSuchElementException();
-        }
+    public Double getDouble(String key) {
+        return get(key).asDouble();
     }
 
     /**
-     * Returns the integer associated with the given key. If no value is
-     * associated with this key ({@code null} is a value) or the given value
-     * is not a number ({@code null} IS a number), a
-     * {@link NoSuchElementException} will be thrown.
+     * Returns the float to the given key, or {@code null} if no mapping
+     * exists. If a mapping exists but the given value is not a number,
+     * a {@link ClassCastException} will be thrown.
      *
      * @param key The key to get the value for
-     * @return The integer associated with the key
-     * @throws NoSuchElementException If no mapping for the given key exists
-     *                                or the value is not a number
+     * @return The mapped float, or {@code null}
      */
-    public Integer getNullableInt(String key) throws NoSuchElementException {
-        try {
-            Object num = get(key);
-            return num != null ? ((Number)num).intValue() : null;
-        } catch(ClassCastException e) {
-            throw new NoSuchElementException();
-        }
+    public Float getFloat(String key) {
+        return get(key).asFloat();
     }
 
     /**
-     * Returns the short associated with the given key. If no value is
-     * associated with this key ({@code null} is a value) or the given value
-     * is not a number ({@code null} IS a number), a
-     * {@link NoSuchElementException} will be thrown.
+     * Returns the boolean to the given key, or {@code null} if no mapping
+     * exists. If a mapping exists but the given value is not a boolean,
+     * a {@link ClassCastException} will be thrown.
      *
      * @param key The key to get the value for
-     * @return The short associated with the key
-     * @throws NoSuchElementException If no mapping for the given key exists
-     *                                or the value is not a number
+     * @return The mapped boolean, or {@code null}
      */
-    public Short getNullableShort(String key) throws NoSuchElementException {
-        try {
-            Object num = get(key);
-            return num != null ? ((Number)num).shortValue() : null;
-        } catch(ClassCastException e) {
-            throw new NoSuchElementException();
-        }
-    }
-
-    /**
-     * Returns the byte associated with the given key. If no value is
-     * associated with this key ({@code null} is a value) or the given value
-     * is not a number ({@code null} IS a number), a
-     * {@link NoSuchElementException} will be thrown.
-     *
-     * @param key The key to get the value for
-     * @return The byte associated with the key
-     * @throws NoSuchElementException If no mapping for the given key exists
-     *                                or the value is not a number
-     */
-    public Byte getNullableByte(String key) throws NoSuchElementException {
-        try {
-            Object num = get(key);
-            return num != null ? ((Number)num).byteValue() : null;
-        } catch(ClassCastException e) {
-            throw new NoSuchElementException();
-        }
-    }
-
-    /**
-     * Returns the double associated with the given key. If no value is
-     * associated with this key ({@code null} is a value) or the given value
-     * is not a number ({@code null} IS a number), a
-     * {@link NoSuchElementException} will be thrown.
-     *
-     * @param key The key to get the value for
-     * @return The double associated with the key
-     * @throws NoSuchElementException If no mapping for the given key exists
-     *                                or the value is not a number
-     */
-    public Double getNullableDouble(String key) throws NoSuchElementException {
-        try {
-            Object num = get(key);
-            return num != null ? ((Number)num).doubleValue() : null;
-        } catch(ClassCastException e) {
-            throw new NoSuchElementException();
-        }
-    }
-
-    /**
-     * Returns the float associated with the given key. If no value is
-     * associated with this key ({@code null} is a value) or the given value
-     * is not a number ({@code null} IS a number), a
-     * {@link NoSuchElementException} will be thrown.
-     *
-     * @param key The key to get the value for
-     * @return The float associated with the key
-     * @throws NoSuchElementException If no mapping for the given key exists
-     *                                or the value is not a number
-     */
-    public Float getNullableFloat(String key) throws NoSuchElementException {
-        try {
-            Object num = get(key);
-            return num != null ? ((Number)num).floatValue() : null;
-        } catch(ClassCastException e) {
-            throw new NoSuchElementException();
-        }
-    }
-
-    /**
-     * Returns the boolean associated with the given key. If no value is
-     * associated with this key ({@code null} is a value) or the given value
-     * is not a boolean ({@code null} IS a boolean), a
-     * {@link NoSuchElementException} will be thrown.
-     *
-     * @param key The key to get the value for
-     * @return The boolean associated with the key
-     * @throws NoSuchElementException If no mapping for the given key exists
-     *                                or the value is not a boolean
-     */
-    public Boolean getNullableBool(String key) throws NoSuchElementException {
-        try {
-            return (Boolean) get(key);
-        } catch(ClassCastException e) {
-            throw new NoSuchElementException();
-        }
+    public Boolean getBool(String key) {
+        return get(key).asBool();
     }
 
 
@@ -467,6 +354,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonElement {
      * @throws JsonParseException If the file does not follow json syntax
      *                            or describes an array instead of an object
      */
+    @Override
     public boolean load(File file) throws JsonParseException {
         JsonObject o = Json.loadObject(file);
         clear();
@@ -482,6 +370,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonElement {
      * @param file The file to store the object in
      * @return Weather the storing was successful
      */
+    @Override
     public boolean store(File file) {
         return Json.store(this, file);
     }

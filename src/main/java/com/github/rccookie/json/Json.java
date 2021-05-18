@@ -23,13 +23,13 @@ public final class Json {
 
 
     /**
-     * Converts the given json element to a json string.
+     * Converts the given json structure to a json string.
      *
-     * @param jsonElement The json element to convert
-     * @return The json string representing the json element
+     * @param jsonStructure The json structure to convert
+     * @return The json string representing the json structure
      */
-    public static String toString(JsonElement jsonElement) {
-        return jsonElement == null ? "null" : jsonElement.toString();
+    public static String toString(JsonStructure jsonStructure) {
+        return jsonStructure == null ? "null" : jsonStructure.toString();
     }
 
 
@@ -67,14 +67,14 @@ public final class Json {
     }
 
     /**
-     * Parses the given json formatted string into a json element.
+     * Parses the given json formatted string into a json structure.
      *
      * @param jsonString The json formatted string to parse
-     * @return The parsed element
+     * @return The parsed structure
      * @throws JsonParseException If the string does not follow json syntax
      */
     public static JsonElement parse(String jsonString) throws JsonParseException {
-        return removeComment(new NicerStringBuilder(jsonString.strip())).startsWith("{") ? parseObject(jsonString) : parseArray(jsonString);
+        return new JsonElement.EmptyJsonElement(removeComment(new NicerStringBuilder(jsonString.strip())).startsWith("{") ? parseObject(jsonString) : parseArray(jsonString));
     }
 
 
@@ -114,11 +114,11 @@ public final class Json {
     }
 
     /**
-     * Parses the given json formatted file into a json element. If an
+     * Parses the given json formatted file into a json structure. If an
      * {@link IOException} occurres {@code null} will be returned.
      *
      * @param file The file to parse from
-     * @return The parsed element
+     * @return The parsed structure
      * @throws JsonParseException If the string does not follow json syntax
      */
     public static JsonElement load(File file) throws JsonParseException {
@@ -132,17 +132,17 @@ public final class Json {
 
 
     /**
-     * Converts the given json element into a json string and stores it
+     * Converts the given json structure into a json string and stores it
      * in the specified file. If the file exists it will be cleared before,
      * otherwise a new file will be created.
      *
-     * @param jsonElement The json element to store
-     * @param file The file to store the element in
+     * @param jsonStructure The json element to store
+     * @param file The file to store the structure in
      * @return Weather the storing was successful
      */
-    public static boolean store(JsonElement jsonElement, File file) {
+    public static boolean store(JsonStructure jsonStructure, File file) {
         try(PrintWriter p = new PrintWriter(file)) {
-            p.println(toString(jsonElement));
+            p.println(toString(jsonStructure));
             return true;
         } catch(IOException e) {
             return false;

@@ -5,8 +5,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.IdentityHashMap;
-import java.util.NoSuchElementException;
 import java.util.Set;
+import java.util.function.Supplier;
 
 import static com.github.rccookie.json.Json.INDENT;
 
@@ -18,7 +18,13 @@ import static com.github.rccookie.json.Json.INDENT;
  * <p>Json arrays implement {@link java.util.List}, so unlike actual
  * arrays they are not of a fixed size.
  */
-public class JsonArray extends ArrayList<Object> implements JsonElement {
+public class JsonArray extends ArrayList<Object> implements JsonStructure {
+
+
+
+    private static final Supplier<Object> OUT_OF_BOUNDS_THROWER = () -> {
+        throw new IndexOutOfBoundsException();
+    };
 
 
 
@@ -113,315 +119,225 @@ public class JsonArray extends ArrayList<Object> implements JsonElement {
 
 
     /**
-     * Returns the json object at the specified index.
-     * <p>If the value at the specified index is not a json object,
-     * a {@link NoSuchElementException} will be thrown.
-     *
-     * @param index The index to get the value at
-     * @return The json object at the given index
-     * @throws NoSuchElementException If the value at the specified index
-     *                                is not a json object
+     * @deprecated Use {@link #getElement(int)} instead for any json interaction.
+     *             If the "pure" value is needed use {@link #getAnything(int)}.
      */
-    public JsonObject getObject(int index) throws NoSuchElementException {
-        try {
-            return (JsonObject) get(index);
-        } catch(ClassCastException e) {
-            throw new NoSuchElementException();
-        }
+    @Override
+    @Deprecated
+    public Object get(int index) {
+        // This method must return the actual value to conform as list. Otherwise
+        // not the object that was set for a specific index would be returned, and
+        // for indices out of bounds no IndexOutOfBoundsException would be thrown
+        return super.get(index);
     }
 
     /**
-     * Returns the json array at the specified index.
-     * <p>If the value at the specified index is not a json array,
-     * a {@link NoSuchElementException} will be thrown.
+     * Returns the value of the specified index, wrapped in a {@link JsonElement}
+     * with the default value {@code null}. If the index is positively out of
+     * bounds for this array an empty json element will be returned. If the index
+     * is negative an {@link IndexOutOfBoundsException} will be thrown.
+     * <p>This method never returns {@code null}.
      *
-     * @param index The index to get the value at
-     * @return The json array at the given index
-     * @throws NoSuchElementException If the value at the specified index
-     *                                is not a json array
+     * @param index The index to get the value for
+     * @return A json element as described above
+     *
+     * @see #getOrDefault(int, Object)
+     * @see #getOrDefaultGet(int, Supplier)
      */
-    public JsonArray getArray(int index) throws NoSuchElementException {
-        try {
-            return (JsonArray) get(index);
-        } catch(ClassCastException e) {
-            throw new NoSuchElementException();
-        }
+    public JsonElement getElement(int index) {
+        return getOrDefault(index, null);
     }
 
     /**
-     * Returns the string at the specified index.
-     * <p>If the value at the specified index is not a string,
-     * a {@link NoSuchElementException} will be thrown.
+     * Returns the value of the specified index, wrapped in a {@link JsonElement}
+     * with the given default value. If the index is positively out of
+     * bounds for this array an empty json element will be returned. If the index
+     * is negative an {@link IndexOutOfBoundsException} will be thrown.
+     * <p>This method never returns {@code null}.
      *
-     * @param index The index to get the value at
-     * @return The string at the given index
-     * @throws NoSuchElementException If the value at the specified index
-     *                                is not a string
+     * @param index The index to get the value for
+     * @param defaultValue The default value if at some point no value is present
+     * @return A json element as described above
+     *
+     * @see #getOrDefault(int, Object)
+     * @see #getOrDefaultGet(int, Supplier)
      */
-    public String getString(int index) throws NoSuchElementException {
-        try {
-            return (String) get(index);
-        } catch(ClassCastException e) {
-            throw new NoSuchElementException();
-        }
+    public JsonElement getOrDefault(int index, Object defaultValue) {
+        return index < size() ? new JsonElement(super.get(index), defaultValue) : new JsonElement.EmptyJsonElement(defaultValue);
     }
 
     /**
-     * Returns the long at the specified index.
-     * <p>If the value at the specified index is not a number,
-     * a {@link NoSuchElementException} will be thrown.
+     * Returns the value of the specified index, wrapped in a {@link JsonElement}
+     * with the given default value generator. If the index is positively out of
+     * bounds for this array an empty json element will be returned. If the index
+     * is negative an {@link IndexOutOfBoundsException} will be thrown.
+     * <p>This method never returns {@code null}.
      *
-     * @param index The index to get the value at
-     * @return The long at the given index
-     * @throws NoSuchElementException If the value at the specified index
-     *                                is not a number
+     * @param index The index to get the value for
+     * @param defaultGetter A generator that will be used to generate a default
+     *                      value if at some point no value is present and the
+     *                      value is requested
+     * @return A json element as described above
+     *
+     * @see #getOrDefault(int, Object)
+     * @see #getOrDefaultGet(int, Supplier)
      */
-    public long getLong(int index) throws NoSuchElementException {
-        try {
-            return ((Number)get(index)).longValue();
-        } catch(ClassCastException | NullPointerException e) {
-            throw new NoSuchElementException();
-        }
+    public JsonElement getOrDefaultGet(int index, Supplier<Object> defaultGetter) {
+        return index < size() ? new JsonElement(super.get(index), defaultGetter) : new JsonElement.EmptyJsonElement(defaultGetter);
+    }
+
+
+
+    /**
+     * Returns the object at the specified index in this json array.
+     * <p>If the index is negative or greater or equal to the size of this
+     * json array, an {@link IndexOutOfBoundsException} will be thrown.
+     *
+     * @param index The index to get the value for
+     * @return The object at the specified index
+     */
+    public Object getAnything(int index) {
+        return getOrDefaultGet(index, OUT_OF_BOUNDS_THROWER).asAnything();
     }
 
     /**
-     * Returns the integer at the specified index.
-     * <p>If the value at the specified index is not a number,
-     * a {@link NoSuchElementException} will be thrown.
+     * Returns the json object at the specified index in this json array.
+     * <p>If the index is negative or greater or equal to the size of this
+     * json array, an {@link IndexOutOfBoundsException} will be thrown. If
+     * the index is within bounds but the object found is not a json object
+     * a {@link ClassCastException} will be thrown.
      *
-     * @param index The index to get the value at
-     * @return The integer at the given index
-     * @throws NoSuchElementException If the value at the specified index
-     *                                is not a number
+     * @param index The index to get the value for
+     * @return The json object at the specified index
      */
-    public int getInt(int index) throws NoSuchElementException {
-        try {
-            return ((Number)get(index)).intValue();
-        } catch(ClassCastException | NullPointerException e) {
-            throw new NoSuchElementException();
-        }
+    public JsonObject getObject(int index) {
+        return getOrDefaultGet(index, OUT_OF_BOUNDS_THROWER).asObject();
     }
 
     /**
-     * Returns the short at the specified index.
-     * <p>If the value at the specified index is not a number,
-     * a {@link NoSuchElementException} will be thrown.
+     * Returns the json array at the specified index in this json array.
+     * <p>If the index is negative or greater or equal to the size of this
+     * json array, an {@link IndexOutOfBoundsException} will be thrown. If
+     * the index is within bounds but the object found is not a json array
+     * a {@link ClassCastException} will be thrown.
      *
-     * @param index The index to get the value at
-     * @return The short at the given index
-     * @throws NoSuchElementException If the value at the specified index
-     *                                is not a number
+     * @param index The index to get the value for
+     * @return The json array at the specified index
      */
-    public short getShort(int index) throws NoSuchElementException {
-        try {
-            return ((Number)get(index)).shortValue();
-        } catch(ClassCastException | NullPointerException e) {
-            throw new NoSuchElementException();
-        }
+    public JsonArray getArray(int index) {
+        return getOrDefaultGet(index, OUT_OF_BOUNDS_THROWER).asArray();
     }
 
     /**
-     * Returns the byte at the specified index.
-     * <p>If the value at the specified index is not a number,
-     * a {@link NoSuchElementException} will be thrown.
+     * Returns the string at the specified index in this json array.
+     * <p>If the index is negative or greater or equal to the size of this
+     * json array, an {@link IndexOutOfBoundsException} will be thrown. If
+     * the index is within bounds but the object found is not a string
+     * a {@link ClassCastException} will be thrown.
      *
-     * @param index The index to get the value at
-     * @return The byte at the given index
-     * @throws NoSuchElementException If the value at the specified index
-     *                                is not a number
+     * @param index The index to get the value for
+     * @return The string at the specified index
      */
-    public byte getByte(int index) throws NoSuchElementException {
-        try {
-            return ((Number)get(index)).byteValue();
-        } catch(ClassCastException | NullPointerException e) {
-            throw new NoSuchElementException();
-        }
+    public String getString(int index) {
+        return getOrDefaultGet(index, OUT_OF_BOUNDS_THROWER).asString();
     }
 
     /**
-     * Returns the double at the specified index.
-     * <p>If the value at the specified index is not a number,
-     * a {@link NoSuchElementException} will be thrown.
+     * Returns the long at the specified index in this json array.
+     * <p>If the index is negative or greater or equal to the size of this
+     * json array, an {@link IndexOutOfBoundsException} will be thrown. If
+     * the index is within bounds but the object found is not a number
+     * a {@link ClassCastException} will be thrown.
      *
-     * @param index The index to get the value at
-     * @return The double at the given index
-     * @throws NoSuchElementException If the value at the specified index
-     *                                is not a number
+     * @param index The index to get the value for
+     * @return The long at the specified index
      */
-    public double getDouble(int index) throws NoSuchElementException {
-        try {
-            return ((Number)get(index)).doubleValue();
-        } catch(ClassCastException | NullPointerException e) {
-            throw new NoSuchElementException();
-        }
+    public Long getLong(int index) {
+        return getOrDefaultGet(index, OUT_OF_BOUNDS_THROWER).asLong();
     }
 
     /**
-     * Returns the float at the specified index.
-     * <p>If the value at the specified index is not a number,
-     * a {@link NoSuchElementException} will be thrown.
+     * Returns the integer at the specified index in this json array.
+     * <p>If the index is negative or greater or equal to the size of this
+     * json array, an {@link IndexOutOfBoundsException} will be thrown. If
+     * the index is within bounds but the object found is not a number
+     * a {@link ClassCastException} will be thrown.
      *
-     * @param index The index to get the value at
-     * @return The float at the given index
-     * @throws NoSuchElementException If the value at the specified index
-     *                                is not a number
+     * @param index The index to get the value for
+     * @return The integer at the specified index
      */
-    public float getFloat(int index) throws NoSuchElementException {
-        try {
-            return ((Number)get(index)).floatValue();
-        } catch(ClassCastException | NullPointerException e) {
-            throw new NoSuchElementException();
-        }
+    public Integer getInt(int index) {
+        return getOrDefaultGet(index, OUT_OF_BOUNDS_THROWER).asInt();
     }
 
     /**
-     * Returns the boolean at the specified index.
-     * <p>If the value at the specified index is not a boolean,
-     * a {@link NoSuchElementException} will be thrown.
+     * Returns the short at the specified index in this json array.
+     * <p>If the index is negative or greater or equal to the size of this
+     * json array, an {@link IndexOutOfBoundsException} will be thrown. If
+     * the index is within bounds but the object found is not a number
+     * a {@link ClassCastException} will be thrown.
      *
-     * @param index The index to get the value at
-     * @return The boolean at the given index
-     * @throws NoSuchElementException If the value at the specified index
-     *                                is not a boolean
+     * @param index The index to get the value for
+     * @return The short at the specified index
      */
-    public boolean getBool(int index) throws NoSuchElementException {
-        try {
-            return (boolean) get(index);
-        } catch(ClassCastException | NullPointerException e) {
-            throw new NoSuchElementException();
-        }
+    public Short getShort(int index) {
+        return getOrDefaultGet(index, OUT_OF_BOUNDS_THROWER).asShort();
     }
 
     /**
-     * Returns the long at the specified index.
-     * <p>If the value at the specified index is not a number,
-     * a {@link NoSuchElementException} will be thrown.
+     * Returns the byte at the specified index in this json array.
+     * <p>If the index is negative or greater or equal to the size of this
+     * json array, an {@link IndexOutOfBoundsException} will be thrown. If
+     * the index is within bounds but the object found is not a number
+     * a {@link ClassCastException} will be thrown.
      *
-     * @param index The index to get the value at
-     * @return The long at the given index
-     * @throws NoSuchElementException If the value at the specified index
-     *                                is not a number
+     * @param index The index to get the value for
+     * @return The byte at the specified index
      */
-    public Long getNullableLong(int index) throws NoSuchElementException {
-        try {
-            Object num = get(index);
-            return num != null ? ((Number)num).longValue() : null;
-        } catch(ClassCastException e) {
-            throw new NoSuchElementException();
-        }
+    public Byte getByte(int index) {
+        return getOrDefaultGet(index, OUT_OF_BOUNDS_THROWER).asByte();
     }
 
     /**
-     * Returns the integer at the specified index.
-     * <p>If the value at the specified index is not a number,
-     * a {@link NoSuchElementException} will be thrown.
+     * Returns the double at the specified index in this json array.
+     * <p>If the index is negative or greater or equal to the size of this
+     * json array, an {@link IndexOutOfBoundsException} will be thrown. If
+     * the index is within bounds but the object found is not a number
+     * a {@link ClassCastException} will be thrown.
      *
-     * @param index The index to get the value at
-     * @return The integer at the given index
-     * @throws NoSuchElementException If the value at the specified index
-     *                                is not a number
+     * @param index The index to get the value for
+     * @return The double at the specified index
      */
-    public Integer getNullableInt(int index) throws NoSuchElementException {
-        try {
-            Object num = get(index);
-            return num != null ? ((Number)num).intValue() : null;
-        } catch(ClassCastException e) {
-            throw new NoSuchElementException();
-        }
+    public Double getDouble(int index) {
+        return getOrDefaultGet(index, OUT_OF_BOUNDS_THROWER).asDouble();
     }
 
     /**
-     * Returns the short at the specified index.
-     * <p>If the value at the specified index is not a number,
-     * a {@link NoSuchElementException} will be thrown.
+     * Returns the float at the specified index in this json array.
+     * <p>If the index is negative or greater or equal to the size of this
+     * json array, an {@link IndexOutOfBoundsException} will be thrown. If
+     * the index is within bounds but the object found is not a number
+     * a {@link ClassCastException} will be thrown.
      *
-     * @param index The index to get the value at
-     * @return The short at the given index
-     * @throws NoSuchElementException If the value at the specified index
-     *                                is not a number
+     * @param index The index to get the value for
+     * @return The float at the specified index
      */
-    public Short getNullableShort(int index) throws NoSuchElementException {
-        try {
-            Object num = get(index);
-            return num != null ? ((Number)num).shortValue() : null;
-        } catch(ClassCastException e) {
-            throw new NoSuchElementException();
-        }
+    public Float getFloat(int index) {
+        return getOrDefaultGet(index, OUT_OF_BOUNDS_THROWER).asFloat();
     }
 
     /**
-     * Returns the byte at the specified index.
-     * <p>If the value at the specified index is not a number,
-     * a {@link NoSuchElementException} will be thrown.
+     * Returns the boolean at the specified index in this json array.
+     * <p>If the index is negative or greater or equal to the size of this
+     * json array, an {@link IndexOutOfBoundsException} will be thrown. If
+     * the index is within bounds but the object found is not a boolean
+     * a {@link ClassCastException} will be thrown.
      *
-     * @param index The index to get the value at
-     * @return The byte at the given index
-     * @throws NoSuchElementException If the value at the specified index
-     *                                is not a number
+     * @param index The index to get the value for
+     * @return The boolean at the specified index
      */
-    public Byte getNullableByte(int index) throws NoSuchElementException {
-        try {
-            Object num = get(index);
-            return num != null ? ((Number)num).byteValue() : null;
-        } catch(ClassCastException e) {
-            throw new NoSuchElementException();
-        }
-    }
-
-    /**
-     * Returns the double at the specified index.
-     * <p>If the value at the specified index is not a number,
-     * a {@link NoSuchElementException} will be thrown.
-     *
-     * @param index The index to get the value at
-     * @return The double at the given index
-     * @throws NoSuchElementException If the value at the specified index
-     *                                is not a number
-     */
-    public Double getNullableDouble(int index) throws NoSuchElementException {
-        try {
-            Object num = get(index);
-            return num != null ? ((Number)num).doubleValue() : null;
-        } catch(ClassCastException e) {
-            throw new NoSuchElementException();
-        }
-    }
-
-    /**
-     * Returns the float at the specified index.
-     * <p>If the value at the specified index is not a number,
-     * a {@link NoSuchElementException} will be thrown.
-     *
-     * @param index The index to get the value at
-     * @return The float at the given index
-     * @throws NoSuchElementException If the value at the specified index
-     *                                is not a number
-     */
-    public Float getNullableFloat(int index) throws NoSuchElementException {
-        try {
-            Object num = get(index);
-            return num != null ? ((Number)num).floatValue() : null;
-        } catch(ClassCastException e) {
-            throw new NoSuchElementException();
-        }
-    }
-
-    /**
-     * Returns the boolean at the specified index.
-     * <p>If the value at the specified index is not a boolean,
-     * a {@link NoSuchElementException} will be thrown.
-     *
-     * @param index The index to get the value at
-     * @return The boolean at the given index
-     * @throws NoSuchElementException If the value at the specified index
-     *                                is not a boolean
-     */
-    public Boolean getNullableBool(int index) throws NoSuchElementException {
-        try {
-            return (Boolean) get(index);
-        } catch(ClassCastException e) {
-            throw new NoSuchElementException();
-        }
+    public Boolean getBool(int index) {
+        return getOrDefaultGet(index, OUT_OF_BOUNDS_THROWER).asBool();
     }
 
 
@@ -436,6 +352,7 @@ public class JsonArray extends ArrayList<Object> implements JsonElement {
      * @throws JsonParseException If the file does not follow json syntax
      *                            or describes an object instead of an array
      */
+    @Override
     public boolean load(File file) throws JsonParseException {
         clear();
         JsonArray a = Json.loadArray(file);
@@ -451,6 +368,7 @@ public class JsonArray extends ArrayList<Object> implements JsonElement {
      * @param file The file to store the array in
      * @return Weather the storing was successful
      */
+    @Override
     public boolean store(File file) {
         return Json.store(this, file);
     }
