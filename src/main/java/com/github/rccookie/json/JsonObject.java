@@ -177,7 +177,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
 
 
     /**
-     * @deprecated Use {@link #get(String)} instead for any json interaction.
+     * @deprecated Use {@link #getElement(String)} instead for any json interaction.
      *             If the "pure" value is needed use {@link #getAnything(String)}.
      */
     @Override
@@ -197,7 +197,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      * @param key The key to get the value for
      * @return A json element as described above
      */
-    public JsonElement get(String key) {
+    public JsonElement getElement(String key) {
         return getOrDefault(key, null);
     }
 
@@ -243,7 +243,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      * @return The mapped value, or {@code null}
      */
     public Object getAnything(String key) {
-        return get(key).asAnything();
+        return getElement(key).asAnything();
     }
 
     /**
@@ -255,7 +255,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      * @return The mapped json object, or {@code null}
      */
     public JsonObject getObject(String key) {
-        return get(key).asObject();
+        return getElement(key).asObject();
     }
 
     /**
@@ -267,7 +267,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      * @return The mapped json array, or {@code null}
      */
     public JsonArray getArray(String key) {
-        return get(key).asArray();
+        return getElement(key).asArray();
     }
 
     /**
@@ -279,7 +279,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      * @return The mapped string, or {@code null}
      */
     public String getString(String key) {
-        return get(key).asString();
+        return getElement(key).asString();
     }
 
     /**
@@ -291,7 +291,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      * @return The mapped long, or {@code null}
      */
     public Long getLong(String key) {
-        return get(key).asLong();
+        return getElement(key).asLong();
     }
 
     /**
@@ -303,7 +303,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      * @return The mapped integer, or {@code null}
      */
     public Integer getInt(String key) {
-        return get(key).asInt();
+        return getElement(key).asInt();
     }
 
     /**
@@ -315,7 +315,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      * @return The mapped short, or {@code null}
      */
     public Short getShort(String key) {
-        return get(key).asShort();
+        return getElement(key).asShort();
     }
 
     /**
@@ -327,7 +327,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      * @return The mapped byte, or {@code null}
      */
     public Byte getByte(String key) {
-        return get(key).asByte();
+        return getElement(key).asByte();
     }
 
     /**
@@ -339,7 +339,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      * @return The mapped double, or {@code null}
      */
     public Double getDouble(String key) {
-        return get(key).asDouble();
+        return getElement(key).asDouble();
     }
 
     /**
@@ -351,7 +351,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      * @return The mapped float, or {@code null}
      */
     public Float getFloat(String key) {
-        return get(key).asFloat();
+        return getElement(key).asFloat();
     }
 
     /**
@@ -363,7 +363,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      * @return The mapped boolean, or {@code null}
      */
     public Boolean getBool(String key) {
-        return get(key).asBool();
+        return getElement(key).asBool();
     }
 
 
