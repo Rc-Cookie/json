@@ -1,18 +1,18 @@
 package com.github.rccookie.json;
 
-class NicerStringBuilder {
+class JsonStringBuilder {
 
     private StringBuilder builder;
 
 
 
-    public NicerStringBuilder(String string) {
+    public JsonStringBuilder(String string) {
         builder = new StringBuilder(string);
     }
 
 
 
-    public NicerStringBuilder delete(int start, int end) {
+    public JsonStringBuilder delete(int start, int end) {
         builder.delete(start, end);
         return this;
     }
@@ -45,16 +45,16 @@ class NicerStringBuilder {
         return builder.length() == 0;
     }
 
-    public NicerStringBuilder stripLeading() {
+    public JsonStringBuilder stripLeading() {
         builder = new StringBuilder(toString().stripLeading());
         return this;
     }
 
-    public NicerStringBuilder delete(int count) {
+    public JsonStringBuilder delete(int count) {
         return delete(0, count);
     }
 
-    public NicerStringBuilder deleteFirst() {
+    public JsonStringBuilder deleteFirst() {
         builder.deleteCharAt(0);
         return this;
     }

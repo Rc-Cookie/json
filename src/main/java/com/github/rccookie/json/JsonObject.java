@@ -91,10 +91,29 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      */
     @Override
     public String toString() throws NestedJsonException {
-        return toString(Collections.newSetFromMap(new IdentityHashMap<>()), 0);
+        return toString(Json.DEFAULT_FORMATTED);
     }
 
-    String toString(Set<Object> blacklist, int level) {
+    /**
+     * Converts this json object into a json string. Any values that are
+     * not a number, a boolean, {@code false} or already a string will be
+     * displayed as their {@link Object#toString()} value.
+     * <p>If this object or any of the contained elements contains itself
+     * a {@link NestedJsonException} will be thrown.
+     *
+     * @param formatted Weather the json string should be formatted with
+     *                  indents and newlines
+     * @return The json string representing this object
+     * @throws NestedJsonException If the json object or one of it's
+     *                             contained json elements contains
+     *                             itself
+     */
+    @Override
+    public String toString(boolean formatted) {
+        return toString(Collections.newSetFromMap(new IdentityHashMap<>()), formatted, 0);
+    }
+
+    String toString(Set<Object> blacklist, boolean formatted, int level) {
         if(isEmpty()) return "{}";
 
         StringBuilder string = new StringBuilder();
@@ -104,11 +123,16 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
         for(Entry<String, Object> member : entrySet()) {
             if (blacklist.contains(member.getValue()))
                 throw new NestedJsonException();
-            string.append('\n').append(INDENT.repeat(level + 1));
-            string.append(Json.stringFor(member.getKey())).append(": ").append(Json.stringFor(member.getValue(), blacklist, level + 1)).append(',');
+            if(formatted) string.append('\n').append(INDENT.repeat(level + 1));
+            string.append(Json.stringFor(member.getKey())).append(':');
+            if(formatted) string.append(' ');
+            string.append(Json.stringFor(member.getValue(), blacklist, formatted, level + 1)).append(',');
         }
 
-        string.deleteCharAt(string.length() - 1).append('\n').append(INDENT.repeat(level)).append('}');
+        string.deleteCharAt(string.length() - 1);
+        if(formatted) string.append('\n').append(INDENT.repeat(level));
+        string.append('}');
+
         blacklist.remove(this); // Allow same instances 'next to each other'
         return string.toString();
     }
@@ -117,7 +141,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
 
     @Override
     public Object put(String key, Object value) {
-        return super.put(Objects.requireNonNull(key), value);
+        return super.put(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), value);
     }
 
     @Override
@@ -127,22 +151,22 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
 
     @Override
     public Object putIfAbsent(String key, Object value) {
-        return super.putIfAbsent(Objects.requireNonNull(key), value);
+        return super.putIfAbsent(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), value);
     }
 
     @Override
     public Object compute(String key, BiFunction<? super String, ? super Object, ?> remappingFunction) {
-        return super.compute(Objects.requireNonNull(key), remappingFunction);
+        return super.compute(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), remappingFunction);
     }
 
     @Override
     public Object computeIfAbsent(String key, Function<? super String, ?> mappingFunction) {
-        return super.computeIfAbsent(Objects.requireNonNull(key), mappingFunction);
+        return super.computeIfAbsent(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), mappingFunction);
     }
 
     @Override
     public Object computeIfPresent(String key, BiFunction<? super String, ? super Object, ?> remappingFunction) {
-        return super.computeIfPresent(Objects.requireNonNull(key), remappingFunction);
+        return super.computeIfPresent(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), remappingFunction);
     }
 
     private static Map<? extends String, ?> checkNoNullKeys(Map<? extends String, ?> m) {
@@ -189,7 +213,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      * @return A json element as described above
      */
     public JsonElement getOrDefault(String key, Object defaultValue) {
-        return containsKey(Objects.requireNonNull(key)) ? new JsonElement(super.get(key), defaultValue) : new JsonElement.EmptyJsonElement(defaultValue);
+        return containsKey(Objects.requireNonNull(key, "Json objects don't permit 'null' as key")) ? new JsonElement(super.get(key), defaultValue) : new JsonElement.EmptyJsonElement(defaultValue);
     }
 
     /**
@@ -206,7 +230,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      * @return A json element as described above
      */
     public JsonElement getOrDefaultGet(String key, Supplier<Object> defaultGetter) {
-        return containsKey(Objects.requireNonNull(key)) ? new JsonElement(super.get(key), defaultGetter) : new JsonElement.EmptyJsonElement(defaultGetter);
+        return containsKey(Objects.requireNonNull(key, "Json objects don't permit 'null' as key")) ? new JsonElement(super.get(key), defaultGetter) : new JsonElement.EmptyJsonElement(defaultGetter);
     }
 
 
@@ -348,11 +372,12 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      * Assigns the value of the given json formatted file to this object.
      * If the file only contains "null" or an {@link java.io.IOException}
      * occurres, the content of this json object will only be cleared.
+     * If the file defines a json array instead of an object, a
+     * {@link ClassCastException} will be thrown.
      *
      * @param file The file to load from
      * @return Weather any assignment was done
      * @throws JsonParseException If the file does not follow json syntax
-     *                            or describes an array instead of an object
      */
     @Override
     public boolean load(File file) throws JsonParseException {

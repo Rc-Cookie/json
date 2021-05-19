@@ -16,10 +16,14 @@ import java.util.function.Supplier;
 public class JsonElement {
 
     private final Object value;
-    private final Object defaultValue;
-    private final Supplier<Object> defaultGetter;
+    final Object defaultValue;
+    final Supplier<Object> defaultGetter;
 
 
+
+    JsonElement(Object value) {
+        this(value, (Object)null);
+    }
 
     JsonElement(Object value, Object defaultValue) {
         this.value = value;
@@ -29,7 +33,7 @@ public class JsonElement {
 
     JsonElement(Object value, Supplier<Object> defaultGetter) {
         this.value = value;
-        this.defaultGetter = Objects.requireNonNull(defaultGetter);
+        this.defaultGetter = Objects.requireNonNull(defaultGetter, "Default getter must not be null");
         defaultValue = null;
     }
 
@@ -46,6 +50,19 @@ public class JsonElement {
     }
 
     /**
+     * Returns the elements value as a json structure. If no value is present
+     * the default value will be returned, or {@code null} if that was not
+     * specified.
+     * <p>Throws a {@link ClassCastException} if the value, or the default
+     * value if the value is not present, is not a json structure.
+     *
+     * @return This element's value, or the default value, as json structure
+     */
+    public JsonStructure asStructure() {
+        return (JsonStructure) asAnything();
+    }
+
+    /**
      * Returns the elements value as a json object. If no value is present
      * the default value will be returned, or {@code null} if that was not
      * specified.
@@ -55,7 +72,7 @@ public class JsonElement {
      * @return This element's value, or the default value, as json object
      */
     public JsonObject asObject() {
-        return (JsonObject) value;
+        return (JsonObject) asAnything();
     }
 
     /**
@@ -68,7 +85,7 @@ public class JsonElement {
      * @return This element's value, or the default value, as json array
      */
     public JsonArray asArray() {
-        return (JsonArray) value;
+        return (JsonArray) asAnything();
     }
 
     /**
@@ -81,7 +98,7 @@ public class JsonElement {
      * @return This element's value, or the default value, as string
      */
     public String asString() {
-        return (String) value;
+        return (String) asAnything();
     }
 
     /**
@@ -94,6 +111,7 @@ public class JsonElement {
      * @return This element's value, or the default value, as long
      */
     public Long asLong() {
+        Object value = asAnything();
         return value != null ? ((Number) value).longValue() : null;
     }
 
@@ -107,6 +125,7 @@ public class JsonElement {
      * @return This element's value, or the default value, as integer
      */
     public Integer asInt() {
+        Object value = asAnything();
         return value != null ? ((Number) value).intValue() : null;
     }
 
@@ -120,6 +139,7 @@ public class JsonElement {
      * @return This element's value, or the default value, as short
      */
     public Short asShort() {
+        Object value = asAnything();
         return value != null ? ((Number) value).shortValue() : null;
     }
 
@@ -133,6 +153,7 @@ public class JsonElement {
      * @return This element's value, or the default value, as byte
      */
     public Byte asByte() {
+        Object value = asAnything();
         return value != null ? ((Number) value).byteValue() : null;
     }
 
@@ -146,6 +167,7 @@ public class JsonElement {
      * @return This element's value, or the default value, as double
      */
     public Double asDouble() {
+        Object value = asAnything();
         return value != null ? ((Number) value).doubleValue() : null;
     }
 
@@ -159,6 +181,7 @@ public class JsonElement {
      * @return This element's value, or the default value, as float
      */
     public Float asFloat() {
+        Object value = asAnything();
         return value != null ? ((Number) value).floatValue() : null;
     }
 
@@ -172,6 +195,7 @@ public class JsonElement {
      * @return This element's value, or the default value, as boolean
      */
     public Boolean asBool() {
+        Object value = asAnything();
         return value != null ? (boolean) value : null;
     }
 
@@ -247,19 +271,41 @@ public class JsonElement {
      */
     @Override
     public String toString() {
-        return Objects.toString(value);
+        return Objects.toString(asAnything());
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(asAnything());
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if(obj == this) return true;
+        return Objects.equals(asAnything(), obj instanceof JsonElement ? ((JsonElement)obj).asAnything() : obj);
     }
 
 
 
     static class EmptyJsonElement extends JsonElement {
 
-        public EmptyJsonElement(Object defaultValue) {
+        EmptyJsonElement() {
+            this((Object)null);
+        }
+
+        EmptyJsonElement(Object defaultValue) {
             super(defaultValue, defaultValue);
         }
 
-        public EmptyJsonElement(Supplier<Object> defaultGetter) {
-            super(defaultGetter.get(), defaultGetter);
+        EmptyJsonElement(Supplier<Object> defaultGetter) {
+            super(null, defaultGetter);
+        }
+
+
+
+        @Override
+        public Object asAnything() {
+            return defaultGetter != null ? defaultGetter.get() : defaultValue;
         }
 
         @Override

@@ -18,7 +18,9 @@ public final class Json {
 
 
 
-    public static final String INDENT = "    ";
+    static String INDENT = "    ";
+
+    static boolean DEFAULT_FORMATTED = true;
 
 
 
@@ -29,41 +31,45 @@ public final class Json {
      * @return The json string representing the json structure
      */
     public static String toString(JsonStructure jsonStructure) {
-        return jsonStructure == null ? "null" : jsonStructure.toString();
+        return toString(jsonStructure, DEFAULT_FORMATTED);
+    }
+
+    /**
+     * Converts the given json structure to a json string.
+     *
+     * @param jsonStructure The json structure to convert
+     * @param formatted Weather the json string should be formatted
+     *                  with indents and newlines
+     * @return The json string representing the json structure
+     */
+    public static String toString(JsonStructure jsonStructure, boolean formatted) {
+        return jsonStructure == null ? "null" : jsonStructure.toString(formatted);
     }
 
 
 
     /**
-     * Parses the given json formatted string into a json object.
+     * Parses the given json formatted string into a json object. Throws a
+     * {@link ClassCastException} if the json string describes a json array.
      *
      * @param jsonString The json formatted string to parse
      * @return The parsed object
      * @throws JsonParseException If the string does not follow json syntax
-     *                            or describes an array rather than an object
      */
     public static JsonObject parseObject(String jsonString) throws JsonParseException {
-        try {
-            return parseNextObject(new NicerStringBuilder(jsonString));
-        } catch(IndexOutOfBoundsException e) {
-            throw new JsonParseException("Reached end of file while parsing");
-        }
+        return parse(jsonString).asObject();
     }
 
     /**
-     * Parses the given json formatted string into a json array.
+     * Parses the given json formatted string into a json array. Throws a
+     * {@link ClassCastException} if the json string describes a json object.
      *
      * @param jsonString The json formatted string to parse
      * @return The parsed array
      * @throws JsonParseException If the string does not follow json syntax
-     *                            or describes an object rather than an array
      */
     public static JsonArray parseArray(String jsonString) throws JsonParseException {
-        try {
-            return parseNextArray(new NicerStringBuilder(jsonString));
-        } catch(IndexOutOfBoundsException e) {
-            throw new JsonParseException("Reached end of file while parsing");
-        }
+        return parse(jsonString).asArray();
     }
 
     /**
@@ -74,58 +80,52 @@ public final class Json {
      * @throws JsonParseException If the string does not follow json syntax
      */
     public static JsonElement parse(String jsonString) throws JsonParseException {
-        return new JsonElement.EmptyJsonElement(removeComment(new NicerStringBuilder(jsonString.strip())).startsWith("{") ? parseObject(jsonString) : parseArray(jsonString));
+        return new JsonElement(new JsonParser(jsonString).parseNextStructure());
     }
 
 
 
     /**
      * Parses the given json formatted file into a json object. If an
-     * {@link IOException} occurres {@code null} will be returned.
+     * {@link IOException} occurres an empty json element will be returned.
+     * Throws a {@link ClassCastException} if the json file describes a
+     * json array.
      *
      * @param file The file to parse from
-     * @return The parsed object
+     * @return The parsed json object
      * @throws JsonParseException If the string does not follow json syntax
-     *                            or describes an array rather than an object
      */
     public static JsonObject loadObject(File file) throws JsonParseException {
-        try {
-            return parseObject(Files.readString(file.toPath()));
-        } catch (IOException e) {
-            return null;
-        }
+        return load(file).asObject();
     }
 
     /**
      * Parses the given json formatted file into a json array. If an
-     * {@link IOException} occurres {@code null} will be returned.
+     * {@link IOException} occurres an empty json element will be returned.
+     * Throws a {@link ClassCastException} if the json file describes a
+     * json object.
      *
      * @param file The file to parse from
-     * @return The parsed array
+     * @return The parsed json array
      * @throws JsonParseException If the string does not follow json syntax
-     *                            or describes an object rather than an array
      */
     public static JsonArray loadArray(File file) throws JsonParseException {
-        try {
-            return parseArray(Files.readString(file.toPath()));
-        } catch (IOException e) {
-            return null;
-        }
+        return load(file).asArray();
     }
 
     /**
-     * Parses the given json formatted file into a json structure. If an
-     * {@link IOException} occurres {@code null} will be returned.
+     * Parses the given json formatted file into a json element. If an
+     * {@link IOException} occurres an empty json element will be returned.
      *
      * @param file The file to parse from
-     * @return The parsed structure
+     * @return The parsed json element
      * @throws JsonParseException If the string does not follow json syntax
      */
     public static JsonElement load(File file) throws JsonParseException {
         try {
             return parse(Files.readString(file.toPath()));
         } catch (IOException e) {
-            return null;
+            return new JsonElement.EmptyJsonElement();
         }
     }
 
@@ -150,170 +150,37 @@ public final class Json {
     }
 
 
-
-    private static JsonObject parseNextObject(NicerStringBuilder json) {
-        removeComment(json);
-        if(json.startsWith("null")) {
-            json.delete(4);
-            return null;
-        }
-
-        char unexpected = json.getAndDeleteFirst();
-        if(unexpected != '{') throw new JsonParseException("'{' expected, '" + unexpected + "' found");
-
-        JsonObject object = new JsonObject();
-        if(removeComment(json.stripLeading()).startsWith('}')) {
-            json.deleteFirst();
-            return object;
-        }
-
-        do {
-            String key = parseNextString(json);
-            removeComment(json.stripLeading());
-            if((unexpected = json.getAndDeleteFirst()) != ':')
-                throw new JsonParseException(" ': <value>' expected, '" + unexpected + "' found");
-            Object value = parseNextValue(removeComment(json.stripLeading()));
-            if(object.put(key, value) != null)
-                throw new JsonParseException("Duplicate key '" + key + "'");
-
-            if (removeComment(json.stripLeading()).startsWith(','))
-                json.deleteFirst().stripLeading();
-        } while(noEndOfLine(removeComment(json).first()));
-
-        if((unexpected = removeComment(json).getAndDeleteFirst()) != '}')
-            throw new JsonParseException("'}' expected, '" + unexpected + "' found");
-        return object;
+    /**
+     * Sets the indent size used when generating a formatted json string.
+     * Must not be negative.
+     *
+     * @param spaceCount The number of spaces used to create an indent
+     */
+    public static void setIndent(int spaceCount) {
+        if(spaceCount < 0) throw new IllegalArgumentException("Indent space count must be positive");
+        INDENT = " ".repeat(spaceCount);
     }
 
-    private static JsonArray parseNextArray(NicerStringBuilder json) {
-        removeComment(json);
-        if(json.startsWith("null")) {
-            json.delete(4);
-            return null;
-        }
-
-        char unexpected = json.getAndDeleteFirst();
-        if(unexpected != '[') throw new JsonParseException("'[' expected, '" + unexpected + "' found (" + json + ")");
-
-        JsonArray array = new JsonArray();
-        if(removeComment(json.stripLeading()).startsWith(']')) {
-            json.deleteFirst();
-            return array;
-        }
-
-        do {
-            array.add(parseNextValue(json));
-
-            if (removeComment(json.stripLeading()).startsWith(','))
-                json.deleteFirst().stripLeading();
-        } while(noEndOfLine(removeComment(json).first()));
-
-        if((unexpected = removeComment(json).getAndDeleteFirst()) != ']')
-            throw new JsonParseException("']' expected, '" + unexpected + "' found");
-        return array;
-    }
-
-    private static Object parseNextValue(NicerStringBuilder json) {
-        if(removeComment(json).startsWith("null")) {
-            json.delete(4);
-            return null;
-        }
-
-        if(json.startsWith("true")) {
-            json.delete(4);
-            return true;
-        }
-        if(json.startsWith("false")) {
-            json.delete(5);
-            return false;
-        }
-
-        if(json.startsWith('{')) return parseNextObject(json);
-        if(json.startsWith('[')) return parseNextArray(json);
-        if(json.startsWith('"')) return parseNextString(json);
-
-        StringBuilder numberString = new StringBuilder();
-        while(noEndOfLine(json.first()))
-            numberString.append(json.getAndDeleteFirst());
-
-        if(numberString.length() == 0)
-            throw new JsonParseException("Expected value, found end of line");
-        String num = numberString.toString();
-
-        try {
-            return Integer.parseInt(num);
-        } catch(NumberFormatException ignored) { }
-        try {
-            return Long.parseLong(num);
-        } catch(NumberFormatException ignored) { }
-        try {
-            return Double.parseDouble(num);
-        } catch(NumberFormatException ignored) { }
-        try {
-            return Float.parseFloat(num);
-        } catch(NumberFormatException ignored) { }
-        try {
-            return Short.parseShort(num);
-        } catch(NumberFormatException ignored) { }
-        try {
-            return Byte.parseByte(num);
-        } catch(NumberFormatException ignored) { }
-
-        throw new JsonParseException("Unexpected non-string value '" + num + "'");
-    }
-
-    // 'null' is not parsed with this method!
-    private static String parseNextString(NicerStringBuilder json) {
-        char unexpected = json.getAndDeleteFirst();
-        if(unexpected != '"') throw new JsonParseException("'\"' expected, '" + unexpected + "' found");
-
-        StringBuilder string = new StringBuilder();
-        while(!json.startsWith('"')) {
-            char c = json.getAndDeleteFirst();
-            if(c == '\\') {
-                c = json.getAndDeleteFirst();
-                if(c == 't') c = '\t';
-                else if(c == 'b') c = '\b';
-                else if(c == 'n') c = '\n';
-                else if(c == 'r') c = '\r';
-                else if(c == 'f') c = '\f';
-                else if(c != '\\' && c != '"') throw new JsonParseException("Unknown character: '\\" + c + "'");
-            }
-            string.append(c);
-        }
-
-        if((unexpected = json.getAndDeleteFirst()) != '"') throw new JsonParseException("'\"' expected, '" + unexpected + "' found");
-        return string.toString();
-    }
-
-    private static NicerStringBuilder removeComment(NicerStringBuilder json) {
-        if(json.startsWith("//")) {
-            int index = json.indexOf('\n');
-            if(index == -1) throw new JsonParseException("Reached end of line during comment");
-            json.delete(index + 1).stripLeading();
-            return removeComment(json);
-        }
-        if(json.startsWith("/*")) {
-            int index = json.indexOf("*/");
-            if(index == -1) throw new JsonParseException("Reached end of line during comment");
-            json.delete(index + 2).stripLeading();
-            return removeComment(json);
-        }
-        return json;
-    }
-
-    private static boolean noEndOfLine(char c) {
-        return c != ',' && c != ']' && c != '}' && c != '/'; // '/' -> Comment
+    /**
+     * Sets weather generated json strings should be formatted if not
+     * specified.
+     *
+     * @param formatted Weather to format json strings if not specified
+     */
+    public static void setDefaultFormatted(boolean formatted) {
+        DEFAULT_FORMATTED = formatted;
     }
 
 
 
-    static String stringFor(Object o, Set<Object> blacklist, int level) {
+
+
+    static String stringFor(Object o, Set<Object> blacklist, boolean formatted, int level) {
         if(o == null) return "null";
         if(o instanceof JsonObject)
-            return ((JsonObject)o).toString(blacklist, level);
+            return ((JsonObject)o).toString(blacklist, formatted, level);
         if(o instanceof JsonArray)
-            return ((JsonArray)o).toString(blacklist, level);
+            return ((JsonArray)o).toString(blacklist, formatted, level);
         if(o instanceof Number || o instanceof Boolean) return o.toString();
         return stringFor(o.toString());
     }

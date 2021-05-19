@@ -1,7 +1,7 @@
 /**
  * A library used to work with JSON files. The parsing is handled
  * by the {@link com.github.rccookie.json.Json Json} class, it can
- * handle json strings with proper JSON formatting and additionally
+ * handle json strings with common JSON formatting and additionally
  * single line and multiline comments and trailing commas.
  *
  * <p>JSON objects and arrays are represented by the classes

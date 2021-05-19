@@ -96,10 +96,29 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      */
     @Override
     public String toString() {
-        return toString(Collections.newSetFromMap(new IdentityHashMap<>()), 0);
+        return toString(Json.DEFAULT_FORMATTED);
     }
 
-    String toString(Set<Object> blacklist, int level) {
+    /**
+     * Converts this json array into a json string. Any values that are
+     * not a number, a boolean, {@code false} or already a string will be
+     * displayed as their {@link Object#toString()} value.
+     * <p>If this array or any of the contained elements contains itself
+     * a {@link NestedJsonException} will be thrown.
+     *
+     * @param formatted Weather the json string should be formatted with
+     *                  indents and newlines
+     * @return The json string representing this array
+     * @throws NestedJsonException If the json array or one of it's
+     *                             contained json elements contains
+     *                             itself
+     */
+    @Override
+    public String toString(boolean formatted) {
+        return toString(Collections.newSetFromMap(new IdentityHashMap<>()), formatted, 0);
+    }
+
+    String toString(Set<Object> blacklist, boolean formatted, int level) {
         if(isEmpty()) return "[]";
 
         blacklist.add(this);
@@ -108,11 +127,14 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
         for(Object o : this) {
             if(blacklist.contains(o))
                 throw new NestedJsonException();
-            string.append('\n').append(INDENT.repeat(level + 1));
-            string.append(Json.stringFor(o, blacklist, level + 1)).append(',');
+            if(formatted) string.append('\n').append(INDENT.repeat(level + 1));
+            string.append(Json.stringFor(o, blacklist, formatted, level + 1)).append(',');
         }
 
-        string.deleteCharAt(string.length() - 1).append('\n').append(INDENT.repeat(level)).append(']');
+        string.deleteCharAt(string.length() - 1);
+        if(formatted) string.append('\n').append(INDENT.repeat(level));
+        string.append(']');
+
         return string.toString();
     }
 
@@ -346,11 +368,12 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      * Assigns the value of the given json formatted file to this array.
      * If the file only contains "null" or an {@link java.io.IOException}
      * occurres, the content of this json array will only be cleared.
+     * If the file defines a json array instead of an object, a
+     * {@link ClassCastException} will be thrown.
      *
      * @param file The file to load from
      * @return Weather any assignment was done
      * @throws JsonParseException If the file does not follow json syntax
-     *                            or describes an object instead of an array
      */
     @Override
     public boolean load(File file) throws JsonParseException {
