@@ -100,4 +100,4 @@ Finally, storing a json structure into a string or file is just as simple as loa
     object.store(new File("xy.json"));
     Json.store(object, new File("xy.json"));
 
-The same also applies for JsonObjects.
+The same also applies for JsonArrays.
