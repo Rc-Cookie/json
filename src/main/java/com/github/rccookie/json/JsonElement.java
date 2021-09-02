@@ -199,6 +199,61 @@ public class JsonElement {
         return value != null ? (boolean) value : null;
     }
 
+    public boolean isStructure() {
+        Object value = asAnything();
+        return value == null || value instanceof JsonStructure;
+    }
+
+    public boolean isObject() {
+        Object value = asAnything();
+        return value == null || value instanceof JsonObject;
+    }
+
+    public boolean isArray() {
+        Object value = asAnything();
+        return value == null || value instanceof JsonArray;
+    }
+
+    public boolean isString() {
+        Object value = asAnything();
+        return value == null || value instanceof String;
+    }
+
+    public boolean isLong() {
+        Object value = asAnything();
+        return value == null || value instanceof Long;
+    }
+
+    public boolean isInt() {
+        Object value = asAnything();
+        return value == null || value instanceof Integer;
+    }
+
+    public boolean isShort() {
+        Object value = asAnything();
+        return value == null || value instanceof Short;
+    }
+
+    public boolean isByte() {
+        Object value = asAnything();
+        return value == null || value instanceof Byte;
+    }
+
+    public boolean isDouble() {
+        Object value = asAnything();
+        return value == null || value instanceof Double;
+    }
+
+    public boolean isFloat() {
+        Object value = asAnything();
+        return value == null || value instanceof Float;
+    }
+
+    public boolean isBool() {
+        Object value = asAnything();
+        return value == null || value instanceof Boolean;
+    }
+
 
 
     /**
@@ -217,7 +272,7 @@ public class JsonElement {
      * @return The json element as described above. <b>Never {@code null}</b>
      */
     public JsonElement get(String key) {
-        return defaultGetter != null ? asObject().getOrDefaultGet(key, defaultGetter) : asObject().getOrDefault(key, defaultValue);
+        return defaultGetter != null ? asObject().getElementOrGet(key, defaultGetter) : asObject().getElementOr(key, defaultValue);
     }
 
     /**
@@ -236,7 +291,12 @@ public class JsonElement {
      * @return The json element as described above. <b>Never {@code null}</b>
      */
     public JsonElement get(int index) {
-        return defaultGetter != null ? asArray().getOrDefaultGet(index, defaultGetter) : asArray().getOrDefault(index, defaultValue);
+        return defaultGetter != null ? asArray().getElementOrGet(index, defaultGetter) : asArray().getElementOr(index, defaultValue);
+    }
+
+    public JsonElement getPath(Object... path) {
+        if(path.length == 0) return this;
+        return defaultGetter != null ? asStructure().getPathOrGet(defaultGetter, path) : asStructure().getPathOr(defaultValue, path);
     }
 
 
@@ -317,6 +377,11 @@ public class JsonElement {
         @Override
         public JsonElement get(int index) {
             if(index < 0) throw new IndexOutOfBoundsException();
+            return this;
+        }
+
+        @Override
+        public JsonElement getPath(Object... path) {
             return this;
         }
 

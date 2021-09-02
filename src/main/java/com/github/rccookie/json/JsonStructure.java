@@ -1,11 +1,38 @@
 package com.github.rccookie.json;
 
 import java.io.File;
+import java.util.function.Supplier;
 
 /**
  * Superclass of {@link JsonObject} and {@link JsonArray}.
  */
 public interface JsonStructure extends Cloneable {
+
+    /**
+     * Returns true if this json structure is an instance of {@link JsonObject},
+     * just as returned by the statement
+     * <pre>
+     *     jsonStructure instanceof JsonObject
+     * </pre>
+     *
+     * @return Whether this json structure is a json object
+     */
+    default boolean isObject() {
+        return this instanceof JsonObject;
+    }
+
+    /**
+     * Returns true if this json structure is an instance of {@link JsonArray},
+     * just as returned by the statement
+     * <pre>
+     *     jsonStructure instanceof JsonArray
+     * </pre>
+     *
+     * @return Whether this json structure is a json object
+     */
+    default boolean isArray() {
+        return this instanceof JsonArray;
+    }
 
     /**
      * Assigns the value of the given json formatted file to this structure.
@@ -67,4 +94,10 @@ public interface JsonStructure extends Cloneable {
      * @return A copy of this json object
      */
     JsonStructure clone();
+
+    JsonElement getPath(Object... path);
+
+    JsonElement getPathOr(Object defaultValue, Object... path);
+
+    JsonElement getPathOrGet(Supplier<?> defaultGetter, Object... path);
 }

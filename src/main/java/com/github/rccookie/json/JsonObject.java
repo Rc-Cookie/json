@@ -53,7 +53,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
     /**
      * Creates a new json object by parsing the given json formatted
      * file. If the file only contains "null" or an
-     * {@link java.io.IOException IOException} occurres during parsing,
+     * {@link java.io.IOException IOException} occurs during parsing,
      * the json object will be empty. If the file is not formatted
      * properly in json syntax an {@link JsonParseException} will be
      * thrown.
@@ -198,7 +198,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      * @return A json element as described above
      */
     public JsonElement getElement(String key) {
-        return getOrDefault(key, null);
+        return getElementOr(key, null);
     }
 
     /**
@@ -212,7 +212,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      *                     no value is present
      * @return A json element as described above
      */
-    public JsonElement getOrDefault(String key, Object defaultValue) {
+    public JsonElement getElementOr(String key, Object defaultValue) {
         return containsKey(Objects.requireNonNull(key, "Json objects don't permit 'null' as key")) ? new JsonElement(super.get(key), defaultValue) : new JsonElement.EmptyJsonElement(defaultValue);
     }
 
@@ -229,8 +229,33 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      *                      present and the value is requested
      * @return A json element as described above
      */
-    public JsonElement getOrDefaultGet(String key, Supplier<Object> defaultGetter) {
+    public JsonElement getElementOrGet(String key, Supplier<?> defaultGetter) {
         return containsKey(Objects.requireNonNull(key, "Json objects don't permit 'null' as key")) ? new JsonElement(super.get(key), defaultGetter) : new JsonElement.EmptyJsonElement(defaultGetter);
+    }
+
+
+
+    @Override
+    public JsonElement getPath(Object... path) {
+        return getPathOr(null, path);
+    }
+
+    @Override
+    public JsonElement getPathOr(Object defaultValue, Object... path) {
+        if(path.length == 0) return new JsonElement(this);
+        String key = path[0].toString();
+        Object[] otherPath = new Object[path.length - 1];
+        System.arraycopy(path, 1, otherPath, 0, otherPath.length);
+        return getElementOr(key, defaultValue).getPath(otherPath);
+    }
+
+    @Override
+    public JsonElement getPathOrGet(Supplier<?> defaultGetter, Object... path) {
+        if(path.length == 0) return new JsonElement(this);
+        String key = path[0].toString();
+        Object[] otherPath = new Object[path.length - 1];
+        System.arraycopy(path, 1, otherPath, 0, otherPath.length);
+        return getElementOrGet(key, defaultGetter).getPath(otherPath);
     }
 
 
@@ -371,7 +396,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
     /**
      * Assigns the value of the given json formatted file to this object.
      * If the file only contains "null" or an {@link java.io.IOException}
-     * occurres, the content of this json object will only be cleared.
+     * occurs, the content of this json object will only be cleared.
      * If the file defines a json array instead of an object, a
      * {@link ClassCastException} will be thrown.
      *
