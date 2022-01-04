@@ -1,68 +1,74 @@
 package com.github.rccookie.json;
 
+import java.io.Reader;
+
 /**
  * Internal class to handle json parsing.
  */
 final class JsonParser {
 
-    private final JsonStringBuilder json;
+    private final JsonReader json;
 
-    JsonParser(String jsonString) {
-        json = new JsonStringBuilder(jsonString);
+    JsonParser(Reader reader) {
+        json = new JsonReader(reader);
     }
 
 
 
+    void close() {
+        json.close();
+    }
+
     JsonStructure parseNextStructure() {
-        json.stripToContent();
+        json.skipToContent();
         if(removeIfStart("null")) return null;
 
-        char first = json.first();
+        char first = json.peek();
         if(first == '{') return parseNextStructure(true);
         if(first == '[') return parseNextStructure(false);
         throw new JsonParseException("'{' or '['", first, json);
     }
 
     private JsonStructure parseNextStructure(boolean isObject) {
-        json.deleteFirst();
+        json.skip();
         char end = isObject ? '}' : ']';
 
         JsonStructure structure = isObject ? new JsonObject() : new JsonArray();
-        if(json.stripToContent().startsWith(end)) {
-            json.deleteFirst();
+        if(json.skipToContent().startsWith(end)) {
+            json.skip();
             return structure;
         }
 
         if(isObject) {
             do {
                 String key = parseNextString();
-                json.stripToContent();
-                char first = json.popFirst();
+                json.skipToContent();
+                char first = json.read();
                 if(first != ':')
                     throw new JsonParseException(':', first, json);
-                json.stripToContent();
+                json.skipToContent();
                 Object value = parseNextValue();
                 if(((JsonObject) structure).put(key, value) != null)
                     throw new JsonParseException("Duplicate key '" + key + "'", json);
 
-                if (json.stripToContent().startsWith(','))
-                    json.deleteFirst().stripLeading();
+                if (json.skipToContent().startsWith(','))
+                    json.skip().skipWhitespaces();
                 else if(!json.startsWith('}'))
-                    throw new JsonParseException(",' or '}", json.first(), json);
-            } while(noEndOfLine(json.stripToContent().first()));
+                    throw new JsonParseException(",' or '}", json.peek(), json);
+            } while(noEndOfLine(json.skipToContent().peek()));
         }
         else {
             do {
                 ((JsonArray) structure).add(parseNextValue());
 
-                if (json.stripToContent().startsWith(','))
-                    json.deleteFirst().stripLeading();
+                if (json.skipToContent().startsWith(','))
+                    json.skip().skipWhitespaces();
                 else if(!json.startsWith(']'))
-                    throw new JsonParseException(",' or ']", json.first(), json);
-            } while(noEndOfLine(json.stripToContent().first()));
+                    throw new JsonParseException(",' or ']", json.peek(), json);
+            } while(noEndOfLine(json.skipToContent().peek()));
         }
 
-        json.stripToContent();
+        json.skipToContent();
         deleteFirstWithExpectation(isObject ? '}' : ']');
         return structure;
     }
@@ -70,7 +76,7 @@ final class JsonParser {
 
 
     private Object parseNextValue() {
-        json.stripToContent();
+        json.skipToContent();
         if(removeIfStart("null")) return null;
         if(removeIfStart("true")) return true;
         if(removeIfStart("false")) return false;
@@ -80,8 +86,8 @@ final class JsonParser {
         if(json.startsWith('"')) return parseNextString();
 
         StringBuilder numberString = new StringBuilder();
-        while(noEndOfLine(json.first()))
-            numberString.append(json.popFirst());
+        while(noEndOfLine(json.peek()))
+            numberString.append(json.read());
         if(numberString.length() == 0)
             throw new JsonParseException("<value>", "<end of line>", json);
         String num = numberString.toString();
@@ -101,9 +107,9 @@ final class JsonParser {
 
         StringBuilder string = new StringBuilder();
         while(!json.startsWith('"')) {
-            char c = json.popFirst();
+            char c = json.read();
             if(c == '\\') {
-                c = json.popFirst();
+                c = json.read();
                 if(c == 't') c = '\t';
                 else if(c == 'b') c = '\b';
                 else if(c == 'n') c = '\n';
@@ -119,13 +125,13 @@ final class JsonParser {
     }
 
     private void deleteFirstWithExpectation(char expected) {
-        char found = json.popFirst();
+        char found = json.read();
         if(found != expected) throw new JsonParseException(expected, found, json);
     }
 
     private boolean removeIfStart(String possibleStart) {
         if(json.startsWith(possibleStart)) {
-            json.delete(possibleStart.length());
+            json.skip(possibleStart.length());
             return true;
         }
         return false;

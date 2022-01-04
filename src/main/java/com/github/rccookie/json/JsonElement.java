@@ -1,6 +1,6 @@
 package com.github.rccookie.json;
 
-import java.util.Objects;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -10,389 +10,340 @@ import java.util.function.Supplier;
  * data that may exist, but does not have to, and in that case would
  * get replaced by a default value.
  */
-// The main class always represents the state where the value is present,
-// the subclass EmptyJsonElement always represents the state where no
-// value is present.
-public class JsonElement {
-
-    private final Object value;
-    final Object defaultValue;
-    final Supplier<Object> defaultGetter;
-
-
-
-    JsonElement(Object value) {
-        this(value, (Object)null);
-    }
-
-    JsonElement(Object value, Object defaultValue) {
-        this.value = value;
-        this.defaultValue = defaultValue;
-        defaultGetter = null;
-    }
-
-    JsonElement(Object value, Supplier<Object> defaultGetter) {
-        this.value = value;
-        this.defaultGetter = Objects.requireNonNull(defaultGetter, "Default getter must not be null");
-        defaultValue = null;
-    }
-
-
+public interface JsonElement {
 
     /**
-     * Returns the elements value. If no value is present the default value
-     * will be returned, or {@code null} if that was not specified.
+     * Returns the elements value.
      *
-     * @return This element's value, or the default value
+     * @return The value of the json element
+     * @throws NoSuchElementException If no value is present
      */
-    public Object asAnything() {
-        return value;
-    }
+    Object get();
 
     /**
-     * Returns the elements value as a json structure. If no value is present
-     * the default value will be returned, or {@code null} if that was not
-     * specified.
-     * <p>Throws a {@link ClassCastException} if the value, or the default
-     * value if the value is not present, is not a json structure.
+     * Returns the elements value as {@link JsonStructure}.
      *
-     * @return This element's value, or the default value, as json structure
+     * @return The value of the json element as json structure
+     * @throws NoSuchElementException If no value is present
+     * @throws ClassCastException If a non-null value is present and
+     *                            is not a json structure
      */
-    public JsonStructure asStructure() {
-        return (JsonStructure) asAnything();
-    }
+    JsonStructure asStructure();
 
     /**
-     * Returns the elements value as a json object. If no value is present
-     * the default value will be returned, or {@code null} if that was not
-     * specified.
-     * <p>Throws a {@link ClassCastException} if the value, or the default
-     * value if the value is not present, is not a json object.
+     * Returns the elements value as {@link JsonObject}.
      *
-     * @return This element's value, or the default value, as json object
+     * @return The value of the json element as json object
+     * @throws NoSuchElementException If no value is present
+     * @throws ClassCastException If a non-null value is present and
+     *                            is not a json object
      */
-    public JsonObject asObject() {
-        return (JsonObject) asAnything();
-    }
+    JsonObject asObject();
 
     /**
-     * Returns the elements value as a json array. If no value is present
-     * the default value will be returned, or {@code null} if that was not
-     * specified.
-     * <p>Throws a {@link ClassCastException} if the value, or the default
-     * value if the value is not present, is not a json array.
+     * Returns the elements value as {@link JsonArray}.
      *
-     * @return This element's value, or the default value, as json array
+     * @return The value of the json element as json array
+     * @throws NoSuchElementException If no value is present
+     * @throws ClassCastException If a non-null value is present and
+     *                            is not a json array
      */
-    public JsonArray asArray() {
-        return (JsonArray) asAnything();
-    }
+    JsonArray asArray();
 
     /**
-     * Returns the elements value as a string. If no value is present
-     * the default value will be returned, or {@code null} if that was not
-     * specified.
-     * <p>Throws a {@link ClassCastException} if the value, or the default
-     * value if the value is not present, is not a string.
+     * Returns the elements value as {@link String}.
      *
-     * @return This element's value, or the default value, as string
+     * @return The value of the json element as string
+     * @throws NoSuchElementException If no value is present
+     * @throws ClassCastException If a non-null value is present and
+     *                            is not a string
      */
-    public String asString() {
-        return (String) asAnything();
-    }
+    String asString();
 
     /**
-     * Returns the elements value as a long. If no value is present
-     * the default value will be returned, or {@code null} if that was not
-     * specified.
-     * <p>Throws a {@link ClassCastException} if the value, or the default
-     * value if the value is not present, is not a number.
+     * Returns the elements value as {@code long}.
      *
-     * @return This element's value, or the default value, as long
+     * @return The value of the json element as long
+     * @throws NoSuchElementException If no value is present
+     * @throws ClassCastException If a non-null value is present and
+     *                            is not a long
      */
-    public Long asLong() {
-        Object value = asAnything();
-        return value != null ? ((Number) value).longValue() : null;
-    }
+    Long asLong();
 
     /**
-     * Returns the elements value as an integer. If no value is present
-     * the default value will be returned, or {@code null} if that was not
-     * specified.
-     * <p>Throws a {@link ClassCastException} if the value, or the default
-     * value if the value is not present, is not a number.
+     * Returns the elements value as {@code int}.
      *
-     * @return This element's value, or the default value, as integer
+     * @return The value of the json element as int
+     * @throws NoSuchElementException If no value is present
+     * @throws ClassCastException If a non-null value is present and
+     *                            is not an int
      */
-    public Integer asInt() {
-        Object value = asAnything();
-        return value != null ? ((Number) value).intValue() : null;
-    }
+    Integer asInt();
 
     /**
-     * Returns the elements value as a short. If no value is present
-     * the default value will be returned, or {@code null} if that was not
-     * specified.
-     * <p>Throws a {@link ClassCastException} if the value, or the default
-     * value if the value is not present, is not a number.
+     * Returns the elements value as {@code double}.
      *
-     * @return This element's value, or the default value, as short
+     * @return The value of the json element as double
+     * @throws NoSuchElementException If no value is present
+     * @throws ClassCastException If a non-null value is present and
+     *                            is not a double
      */
-    public Short asShort() {
-        Object value = asAnything();
-        return value != null ? ((Number) value).shortValue() : null;
-    }
+    Double asDouble();
 
     /**
-     * Returns the elements value as a byte. If no value is present
-     * the default value will be returned, or {@code null} if that was not
-     * specified.
-     * <p>Throws a {@link ClassCastException} if the value, or the default
-     * value if the value is not present, is not a number.
+     * Returns the elements value as {@code float}.
      *
-     * @return This element's value, or the default value, as byte
+     * @return The value of the json element as float
+     * @throws NoSuchElementException If no value is present
+     * @throws ClassCastException If a non-null value is present and
+     *                            is not a float
      */
-    public Byte asByte() {
-        Object value = asAnything();
-        return value != null ? ((Number) value).byteValue() : null;
-    }
+    Float asFloat();
 
     /**
-     * Returns the elements value as a double. If no value is present
-     * the default value will be returned, or {@code null} if that was not
-     * specified.
-     * <p>Throws a {@link ClassCastException} if the value, or the default
-     * value if the value is not present, is not a number.
+     * Returns the elements value as {@code boolean}.
      *
-     * @return This element's value, or the default value, as double
+     * @return The value of the json element as boolean
+     * @throws NoSuchElementException If no value is present
+     * @throws ClassCastException If a non-null value is present and
+     *                            is not a boolean
      */
-    public Double asDouble() {
-        Object value = asAnything();
-        return value != null ? ((Number) value).doubleValue() : null;
-    }
+    Boolean asBool();
+
 
     /**
-     * Returns the elements value as a float. If no value is present
-     * the default value will be returned, or {@code null} if that was not
-     * specified.
-     * <p>Throws a {@link ClassCastException} if the value, or the default
-     * value if the value is not present, is not a number.
+     * Returns {@code true} if this element contains a value and the value
+     * is either {@code null} or an instance of {@link JsonStructure}.
      *
-     * @return This element's value, or the default value, as float
+     * @return Whether this element contains a json structure
      */
-    public Float asFloat() {
-        Object value = asAnything();
-        return value != null ? ((Number) value).floatValue() : null;
-    }
+    boolean isStructure();
 
     /**
-     * Returns the elements value as a boolean. If no value is present
-     * the default value will be returned, or {@code null} if that was not
-     * specified.
-     * <p>Throws a {@link ClassCastException} if the value, or the default
-     * value if the value is not present, is not a boolean.
+     * Returns {@code true} if this element contains a value and the value
+     * is either {@code null} or an instance of {@link JsonObject}.
      *
-     * @return This element's value, or the default value, as boolean
+     * @return Whether this element contains a json object
      */
-    public Boolean asBool() {
-        Object value = asAnything();
-        return value != null ? (boolean) value : null;
-    }
+    boolean isObject();
 
-    public boolean isStructure() {
-        Object value = asAnything();
-        return value == null || value instanceof JsonStructure;
-    }
+    /**
+     * Returns {@code true} if this element contains a value and the value
+     * is either {@code null} or an instance of {@link JsonArray}.
+     *
+     * @return Whether this element contains a json array
+     */
+    boolean isArray();
 
-    public boolean isObject() {
-        Object value = asAnything();
-        return value == null || value instanceof JsonObject;
-    }
+    /**
+     * Returns {@code true} if this element contains a value and the value
+     * is either {@code null} or an instance of {@link String}.
+     *
+     * @return Whether this element contains a string
+     */
+    boolean isString();
 
-    public boolean isArray() {
-        Object value = asAnything();
-        return value == null || value instanceof JsonArray;
-    }
+    /**
+     * Returns {@code true} if this element contains a value and the value
+     * is either {@code null} or an instance of {@code long}.
+     *
+     * @return Whether this element contains a long
+     */
+    boolean isLong();
 
-    public boolean isString() {
-        Object value = asAnything();
-        return value == null || value instanceof String;
-    }
+    /**
+     * Returns {@code true} if this element contains a value and the value
+     * is either {@code null} or an instance of {@code int}.
+     *
+     * @return Whether this element contains an int
+     */
+    boolean isInt();
 
-    public boolean isLong() {
-        Object value = asAnything();
-        return value == null || value instanceof Long;
-    }
+    /**
+     * Returns {@code true} if this element contains a value and the value
+     * is either {@code null} or an instance of {@code double}.
+     *
+     * @return Whether this element contains a double
+     */
+    boolean isDouble();
 
-    public boolean isInt() {
-        Object value = asAnything();
-        return value == null || value instanceof Integer;
-    }
+    /**
+     * Returns {@code true} if this element contains a value and the value
+     * is either {@code null} or an instance of {@code float}.
+     *
+     * @return Whether this element contains a float
+     */
+    boolean isFloat();
 
-    public boolean isShort() {
-        Object value = asAnything();
-        return value == null || value instanceof Short;
-    }
-
-    public boolean isByte() {
-        Object value = asAnything();
-        return value == null || value instanceof Byte;
-    }
-
-    public boolean isDouble() {
-        Object value = asAnything();
-        return value == null || value instanceof Double;
-    }
-
-    public boolean isFloat() {
-        Object value = asAnything();
-        return value == null || value instanceof Float;
-    }
-
-    public boolean isBool() {
-        Object value = asAnything();
-        return value == null || value instanceof Boolean;
-    }
-
+    /**
+     * Returns {@code true} if this element contains a value and the value
+     * is either {@code null} or an instance of {@code boolean}.
+     *
+     * @return Whether this element contains a boolean
+     */
+    boolean isBool();
 
 
     /**
-     * Returns a json element containing the value that is mapped to
-     * the given key in contained json object.
-     * <p>If the json object does not have a mapping for the given key a
-     * json element representing an unspecified value which will accept
-     * further getting of keys and/or elements at indices and will return
-     * the previously specified default value, will be returned.
-     * <p>If this element already is an empty json element like described
-     * above, it will return itself.
-     * <p>If a value is present but is not a json object, a
-     * {@link ClassCastException} will be thrown.
+     * Returns a json element containing the mapping for the given key in the
+     * map that is contained in this element.
+     * <p>If this element does not have a non-null value, or the contained
+     * object does not have a mapping for the specified key, an empty json
+     * element will be returned.
      *
      * @param key The key to get the value for
-     * @return The json element as described above. <b>Never {@code null}</b>
+     * @return The value mapped for the key, or an empty json element
+     * @throws ClassCastException If a non-null value is present and not an
+     *                            instance of {@link JsonObject}
+     * @throws NullPointerException If the value of this element is {@code null}
      */
-    public JsonElement get(String key) {
-        return defaultGetter != null ? asObject().getElementOrGet(key, defaultGetter) : asObject().getElementOr(key, defaultValue);
-    }
+    JsonElement get(String key);
 
     /**
-     * Returns a json element containing the value that is at the specified
-     * index in the contained json array.
-     * <p>If the json array does not have the given index a
-     * json element representing an unspecified value which will accept
-     * further getting of keys and/or elements at indices and will return
-     * the previously specified default value, will be returned.
-     * <p>If this element already is an empty json element like described
-     * above, it will return itself.
-     * <p>If a value is present but is not a json array, a
-     * {@link ClassCastException} will be thrown.
+     * Returns a json element containing the value at the given index in the
+     * array that is contained in this element.
+     * <p>If this element does not have a non-null value, or the contained
+     * array does not have the specified index, an empty json element will
+     * be returned.
      *
-     * @param index The index to get the value
-     * @return The json element as described above. <b>Never {@code null}</b>
+     * @param index The index to get the value at
+     * @return The value at that index, or an empty json element
+     * @throws ClassCastException If a non-null value is present and not an
+     *                            instance of {@link JsonArray}
      */
-    public JsonElement get(int index) {
-        return defaultGetter != null ? asArray().getElementOrGet(index, defaultGetter) : asArray().getElementOr(index, defaultValue);
-    }
+    JsonElement get(int index);
 
-    public JsonElement getPath(Object... path) {
-        if(path.length == 0) return this;
-        return defaultGetter != null ? asStructure().getPathOrGet(defaultGetter, path) : asStructure().getPathOr(defaultValue, path);
-    }
+    /**
+     * Returns a {@link JsonElement} with the value mapped at the specified
+     * path, or an empty json element if that value does not exist.
+     *
+     * @param path The path of the value to get
+     * @return A json element with the value, or empty
+     */
+    JsonElement getPath(String path);
 
+    /**
+     * Returns a {@link JsonElement} with the value mapped at the specified
+     * path, or an empty json element if that value does not exist.
+     *
+     * @param path The path of the value to get
+     * @return A json element with the value, or empty
+     */
+    JsonElement getPath(Object... path);
 
 
     /**
-     * Returns an optional containing itself if a value is present, otherwise
-     * an empty optional.
+     * Returns this element if a non-null value is present, or a json element
+     * with the given non-null value.
      *
-     * @return An optional containing itself if a value is present
+     * @param ifNotPresent The value to use if no non-null value is present
+     * @return A json element with a non-null value
      */
-    public Optional<JsonElement> toOptional() {
-        return Optional.of(this);
-    }
+    JsonElement or(Object ifNotPresent);
 
     /**
-     * Returns weather a value is present or if the default value would be used
-     * ({@code null} is also a value, if it was mapped / set to the responsible
-     * key / index).
+     * Returns this element if a non-null value is present, or the specified
+     * json element if this one is empty.
      *
-     * @return Weather a value is present
+     * @param useIfNotPresent The element to use if no non-null value is present
+     * @return This or the given json element
      */
-    public boolean isPresent() {
-        return true;
-    }
+    JsonElement orElse(JsonElement useIfNotPresent);
 
     /**
-     * If a value is present, its {@link Object#toString()} result will be
-     * returned, otherwise the result for the default value will be returned,
-     * or {@code "null"} if no default was specified.
+     * Returns this element if a non-null value is present, or gets the specified
+     * json element if this one is empty.
      *
-     * @return The toString return of the element's value or default value
+     * @param useIfNotPresent Supplier for element to use if no non-null value
+     *                        is present
+     * @return This or the supplied json element
      */
-    @Override
-    public String toString() {
-        return Objects.toString(asAnything());
-    }
+    JsonElement orElse(Supplier<JsonElement> useIfNotPresent);
 
-    @Override
-    public int hashCode() {
-        return Objects.hashCode(asAnything());
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if(obj == this) return true;
-        return Objects.equals(asAnything(), obj instanceof JsonElement ? ((JsonElement)obj).asAnything() : obj);
-    }
+    /**
+     * Returns this element if a non-null value is present, or a json element
+     * with the supplied non-null value.
+     *
+     * @param getIfNotPresent Supplier for the value to use if no non-null value
+     *                        is present
+     * @return A json element with a non-null value
+     */
+    JsonElement orGet(Supplier<?> getIfNotPresent);
 
 
+    /**
+     * Returns this element if a value is present, or a json element with
+     * the specified value if no value is present.
+     *
+     * @param ifNotPresent The value to use if no value is present
+     * @return A json element with a value present
+     */
+    JsonElement nullOr(Object ifNotPresent);
 
-    static class EmptyJsonElement extends JsonElement {
+    /**
+     * Returns this element if a value is present, or the specified json
+     * element if this one is empty.
+     *
+     * @param useIfNotPresent The element to use if no value is present
+     * @return This or the given json element
+     */
+    JsonElement nullOrElse(JsonElement useIfNotPresent);
 
-        EmptyJsonElement() {
-            this((Object)null);
-        }
+    /**
+     * Returns this element if a value is present, or gets a json element
+     * from the specified supplier if this one is empty.
+     *
+     * @param useIfNotPresent The json element supplier to use if no value
+     *                        is present
+     * @return This or the supplied json element
+     */
+    JsonElement nullOrElse(Supplier<JsonElement> useIfNotPresent);
 
-        EmptyJsonElement(Object defaultValue) {
-            super(defaultValue, defaultValue);
-        }
+    /**
+     * Returns this element if a value is present, or a json element with
+     * the supplier value.
+     *
+     * @param getIfNotPresent The supplier for the value if no value is
+     *                        present
+     * @return A json element with a value present
+     */
+    JsonElement nullOrGet(Supplier<?> getIfNotPresent);
 
-        EmptyJsonElement(Supplier<Object> defaultGetter) {
-            super(null, defaultGetter);
-        }
+    /**
+     * Returns this element if a value is present, or a json element with
+     * the value {@code null} if this element is empty.
+     *
+     * @return A json element with a value present
+     */
+    JsonElement orNull();
 
 
+    /**
+     * Returns an optional containing this element if a value is present
+     * or an empty optional if no value is present
+     *
+     * @return An optional as described above
+     */
+    Optional<JsonElement> toOptional();
 
-        @Override
-        public Object asAnything() {
-            return defaultGetter != null ? defaultGetter.get() : defaultValue;
-        }
+    /**
+     * Returns whether a value is present ({@code null} is also a value!)
+     *
+     * @return Whether a value is present
+     */
+    boolean isPresent();
 
-        @Override
-        public JsonElement get(String key) {
-            if(key == null) throw new NullPointerException();
-            return this;
-        }
+    /**
+     * Returns whether no value is present ({@code null} is also a value!)
+     *
+     * @return Whether no value is present
+     */
+    boolean isEmpty();
 
-        @Override
-        public JsonElement get(int index) {
-            if(index < 0) throw new IndexOutOfBoundsException();
-            return this;
-        }
-
-        @Override
-        public JsonElement getPath(Object... path) {
-            return this;
-        }
-
-        @Override
-        public Optional<JsonElement> toOptional() {
-            return Optional.empty();
-        }
-
-        @Override
-        public boolean isPresent() {
-            return false;
-        }
-    }
+    /**
+     * Returns whether a non-null value is present.
+     *
+     * @return Whether a non-null value is present
+     */
+    boolean isNotNull();
 }

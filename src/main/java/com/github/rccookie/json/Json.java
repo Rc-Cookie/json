@@ -1,9 +1,12 @@
 package com.github.rccookie.json;
 
 import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.nio.file.Files;
+import java.io.Reader;
+import java.io.StringReader;
+import java.io.UncheckedIOException;
 import java.util.Set;
 
 /**
@@ -80,9 +83,55 @@ public final class Json {
      * @throws JsonParseException If the string does not follow json syntax
      */
     public static JsonElement parse(String jsonString) throws JsonParseException {
-        return new JsonElement(new JsonParser(jsonString).parseNextStructure());
+        return load(new StringReader(jsonString));
     }
 
+
+
+    /**
+     * Parses the given json formatted file into a json object. If an
+     * {@link IOException} occurres an empty json element will be returned.
+     * Throws a {@link ClassCastException} if the json file describes a
+     * json array.
+     *
+     * @param file The file to parse from
+     * @return The parsed json object
+     * @throws JsonParseException If the string does not follow json syntax
+     */
+    public static JsonObject loadObject(String file) throws JsonParseException {
+        return load(file).asObject();
+    }
+
+    /**
+     * Parses the given json formatted file into a json array. If an
+     * {@link IOException} occurres an empty json element will be returned.
+     * Throws a {@link ClassCastException} if the json file describes a
+     * json object.
+     *
+     * @param file The file to parse from
+     * @return The parsed json array
+     * @throws JsonParseException If the string does not follow json syntax
+     */
+    public static JsonArray loadArray(String file) throws JsonParseException {
+        return load(file).asArray();
+    }
+
+    /**
+     * Parses the given json formatted file into a json element. If an
+     * {@link IOException} occurres an empty json element will be returned.
+     *
+     * @param file The file to parse from
+     * @return The parsed json element
+     * @throws JsonParseException If the string does not follow json syntax
+     */
+    public static JsonElement load(String file) throws JsonParseException {
+        try {
+            return load(new FileReader(file));
+        } catch(IOException e) {
+            e.printStackTrace();
+            return EmptyJsonElement.INSTANCE;
+        }
+    }
 
 
     /**
@@ -123,9 +172,59 @@ public final class Json {
      */
     public static JsonElement load(File file) throws JsonParseException {
         try {
-            return parse(Files.readString(file.toPath()));
-        } catch (IOException e) {
-            return new JsonElement.EmptyJsonElement();
+            return load(new FileReader(file));
+        } catch(IOException e) {
+            e.printStackTrace();
+            return EmptyJsonElement.INSTANCE;
+        }
+    }
+
+
+    /**
+     * Parses the given json formatted input into a json object. If an
+     * {@link IOException} occurres an empty json element will be returned.
+     * Throws a {@link ClassCastException} if the json file describes a
+     * json array.
+     *
+     * @param reader The file to parse from
+     * @return The parsed json object
+     * @throws JsonParseException If the string does not follow json syntax
+     */
+    public static JsonObject loadObject(Reader reader) throws JsonParseException {
+        return load(reader).asObject();
+    }
+
+    /**
+     * Parses the given json formatted input into a json array. If an
+     * {@link IOException} occurres an empty json element will be returned.
+     * Throws a {@link ClassCastException} if the json file describes a
+     * json object.
+     *
+     * @param reader The file to parse from
+     * @return The parsed json array
+     * @throws JsonParseException If the string does not follow json syntax
+     */
+    public static JsonArray loadArray(Reader reader) throws JsonParseException {
+        return load(reader).asArray();
+    }
+
+    /**
+     * Parses the given json formatted input into a json element. If an
+     * {@link IOException} occurres an empty json element will be returned.
+     *
+     * @param reader The reader to parse from
+     * @return The parsed json element
+     * @throws JsonParseException If the string does not follow json syntax
+     */
+    public static JsonElement load(Reader reader) throws JsonParseException {
+        try {
+            JsonParser parser = new JsonParser(reader);
+            JsonElement result = new FullJsonElement(parser.parseNextStructure());
+            parser.close();
+            return result;
+        } catch(UncheckedIOException e) {
+            e.getCause().printStackTrace();
+            return EmptyJsonElement.INSTANCE;
         }
     }
 
@@ -193,5 +292,9 @@ public final class Json {
                 .replace("\r", "\\r")
                 .replace("\f", "\\f")
                 .replace("\"", "\\\"")) + '"';
+    }
+
+    static Object[] parsePath(String path) {
+        return path.replace("]", "").split("[\\[.]");
     }
 }

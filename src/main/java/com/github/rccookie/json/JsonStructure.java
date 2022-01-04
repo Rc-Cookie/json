@@ -1,7 +1,6 @@
 package com.github.rccookie.json;
 
 import java.io.File;
-import java.util.function.Supplier;
 
 /**
  * Superclass of {@link JsonObject} and {@link JsonArray}.
@@ -95,9 +94,21 @@ public interface JsonStructure extends Cloneable {
      */
     JsonStructure clone();
 
+    /**
+     * Returns a {@link JsonElement} with the value mapped at the specified
+     * path, or an empty json element if that value does not exist.
+     *
+     * @param path The path of the value to get
+     * @return A json element with the value, or empty
+     */
+    JsonElement getPath(String path);
+
+    /**
+     * Returns a {@link JsonElement} with the value mapped at the specified
+     * path, or an empty json element if that value does not exist.
+     *
+     * @param path The path of the value to get
+     * @return A json element with the value, or empty
+     */
     JsonElement getPath(Object... path);
-
-    JsonElement getPathOr(Object defaultValue, Object... path);
-
-    JsonElement getPathOrGet(Supplier<?> defaultGetter, Object... path);
 }

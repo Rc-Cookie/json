@@ -2,6 +2,7 @@ package com.github.rccookie.json;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -141,19 +142,6 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
 
 
     /**
-     * @deprecated Use {@link #getElement(int)} instead for any json interaction.
-     *             If the "pure" value is needed use {@link #getAnything(int)}.
-     */
-    @Override
-    @Deprecated
-    public Object get(int index) {
-        // This method must return the actual value to conform as list. Otherwise
-        // not the object that was set for a specific index would be returned, and
-        // for indices out of bounds no IndexOutOfBoundsException would be thrown
-        return super.get(index);
-    }
-
-    /**
      * Returns the value of the specified index, wrapped in a {@link JsonElement}
      * with the default value {@code null}. If the index is positively out of
      * bounds for this array an empty json element will be returned. If the index
@@ -162,90 +150,25 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      *
      * @param index The index to get the value for
      * @return A json element as described above
-     *
-     * @see #getElementOr(int, Object)
-     * @see #getElementOrGet(int, Supplier)
      */
     public JsonElement getElement(int index) {
-        return getElementOr(index, null);
-    }
-
-    /**
-     * Returns the value of the specified index, wrapped in a {@link JsonElement}
-     * with the given default value. If the index is positively out of
-     * bounds for this array an empty json element will be returned. If the index
-     * is negative an {@link IndexOutOfBoundsException} will be thrown.
-     * <p>This method never returns {@code null}.
-     *
-     * @param index The index to get the value for
-     * @param defaultValue The default value if at some point no value is present
-     * @return A json element as described above
-     *
-     * @see #getElementOr(int, Object)
-     * @see #getElementOrGet(int, Supplier)
-     */
-    public JsonElement getElementOr(int index, Object defaultValue) {
-        return index < size() ? new JsonElement(super.get(index), defaultValue) : new JsonElement.EmptyJsonElement(defaultValue);
-    }
-
-    /**
-     * Returns the value of the specified index, wrapped in a {@link JsonElement}
-     * with the given default value generator. If the index is positively out of
-     * bounds for this array an empty json element will be returned. If the index
-     * is negative an {@link IndexOutOfBoundsException} will be thrown.
-     * <p>This method never returns {@code null}.
-     *
-     * @param index The index to get the value for
-     * @param defaultGetter A generator that will be used to generate a default
-     *                      value if at some point no value is present and the
-     *                      value is requested
-     * @return A json element as described above
-     *
-     * @see #getElementOr(int, Object)
-     * @see #getElementOrGet(int, Supplier)
-     */
-    public JsonElement getElementOrGet(int index, Supplier<?> defaultGetter) {
-        return index < size() ? new JsonElement(super.get(index), defaultGetter) : new JsonElement.EmptyJsonElement(defaultGetter);
+        return index < size() ? new FullJsonElement(get(index)) : EmptyJsonElement.INSTANCE;
     }
 
 
+    @Override
+    public JsonElement getPath(String path) {
+        return getPath(Json.parsePath(path));
+    }
 
     @Override
     public JsonElement getPath(Object... path) {
-        return getPathOr(null, path);
-    }
-
-    @Override
-    public JsonElement getPathOr(Object defaultValue, Object... path) {
-        if(path.length == 0) return new JsonElement(this);
+        if(path.length == 0) return new FullJsonElement(this);
         int index = path[0] instanceof Integer ? (int)path[0] : Integer.parseInt(path[0].toString());
-        Object[] otherPath = new Object[path.length - 1];
-        System.arraycopy(path, 1, otherPath, 0, otherPath.length);
-        return getElementOr(index, defaultValue).getPath(otherPath);
-    }
-
-    @Override
-    public JsonElement getPathOrGet(Supplier<?> defaultGetter, Object... path) {
-        if(path.length == 0) return new JsonElement(this);
-        int index = path[0] instanceof Integer ? (int)path[0] : Integer.parseInt(path[0].toString());
-        Object[] otherPath = new Object[path.length - 1];
-        System.arraycopy(path, 1, otherPath, 0, otherPath.length);
-        return getElementOrGet(index, defaultGetter).getPath(otherPath);
+        return getElement(index).getPath(Arrays.copyOfRange(path, 1, path.length));
     }
 
 
-
-    /**
-     * Returns the object at the specified index in this json array.
-     * <p>If the index is negative or greater or equal to the size of this
-     * json array, an {@link IndexOutOfBoundsException} will be thrown.
-     *
-     * @param index The index to get the value for
-     * @return The object at the specified index
-     */
-    public Object getAnything(int index) {
-        return getElementOrGet(index, OUT_OF_BOUNDS_THROWER).asAnything();
-    }
 
     /**
      * Returns the json object at the specified index in this json array.
@@ -258,7 +181,7 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      * @return The json object at the specified index
      */
     public JsonObject getObject(int index) {
-        return getElementOrGet(index, OUT_OF_BOUNDS_THROWER).asObject();
+        return getElement(index).orGet(OUT_OF_BOUNDS_THROWER).asObject();
     }
 
     /**
@@ -272,7 +195,7 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      * @return The json array at the specified index
      */
     public JsonArray getArray(int index) {
-        return getElementOrGet(index, OUT_OF_BOUNDS_THROWER).asArray();
+        return getElement(index).orGet(OUT_OF_BOUNDS_THROWER).asArray();
     }
 
     /**
@@ -286,7 +209,7 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      * @return The string at the specified index
      */
     public String getString(int index) {
-        return getElementOrGet(index, OUT_OF_BOUNDS_THROWER).asString();
+        return getElement(index).orGet(OUT_OF_BOUNDS_THROWER).asString();
     }
 
     /**
@@ -300,7 +223,7 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      * @return The long at the specified index
      */
     public Long getLong(int index) {
-        return getElementOrGet(index, OUT_OF_BOUNDS_THROWER).asLong();
+        return getElement(index).orGet(OUT_OF_BOUNDS_THROWER).asLong();
     }
 
     /**
@@ -314,35 +237,7 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      * @return The integer at the specified index
      */
     public Integer getInt(int index) {
-        return getElementOrGet(index, OUT_OF_BOUNDS_THROWER).asInt();
-    }
-
-    /**
-     * Returns the short at the specified index in this json array.
-     * <p>If the index is negative or greater or equal to the size of this
-     * json array, an {@link IndexOutOfBoundsException} will be thrown. If
-     * the index is within bounds but the object found is not a number
-     * a {@link ClassCastException} will be thrown.
-     *
-     * @param index The index to get the value for
-     * @return The short at the specified index
-     */
-    public Short getShort(int index) {
-        return getElementOrGet(index, OUT_OF_BOUNDS_THROWER).asShort();
-    }
-
-    /**
-     * Returns the byte at the specified index in this json array.
-     * <p>If the index is negative or greater or equal to the size of this
-     * json array, an {@link IndexOutOfBoundsException} will be thrown. If
-     * the index is within bounds but the object found is not a number
-     * a {@link ClassCastException} will be thrown.
-     *
-     * @param index The index to get the value for
-     * @return The byte at the specified index
-     */
-    public Byte getByte(int index) {
-        return getElementOrGet(index, OUT_OF_BOUNDS_THROWER).asByte();
+        return getElement(index).orGet(OUT_OF_BOUNDS_THROWER).asInt();
     }
 
     /**
@@ -356,7 +251,7 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      * @return The double at the specified index
      */
     public Double getDouble(int index) {
-        return getElementOrGet(index, OUT_OF_BOUNDS_THROWER).asDouble();
+        return getElement(index).orGet(OUT_OF_BOUNDS_THROWER).asDouble();
     }
 
     /**
@@ -370,7 +265,7 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      * @return The float at the specified index
      */
     public Float getFloat(int index) {
-        return getElementOrGet(index, OUT_OF_BOUNDS_THROWER).asFloat();
+        return getElement(index).orGet(OUT_OF_BOUNDS_THROWER).asFloat();
     }
 
     /**
@@ -384,7 +279,7 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      * @return The boolean at the specified index
      */
     public Boolean getBool(int index) {
-        return getElementOrGet(index, OUT_OF_BOUNDS_THROWER).asBool();
+        return getElement(index).orGet(OUT_OF_BOUNDS_THROWER).asBool();
     }
 
 

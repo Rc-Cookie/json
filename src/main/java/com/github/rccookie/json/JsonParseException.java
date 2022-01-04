@@ -6,11 +6,11 @@ package com.github.rccookie.json;
  */
 public class JsonParseException extends RuntimeException {
 
-    JsonParseException(String message, JsonStringBuilder json) {
+    JsonParseException(String message, JsonReader json) {
         super(message + " (" + json.getPosition() + ')');
     }
 
-    JsonParseException(Object expected, Object found, JsonStringBuilder json) {
+    JsonParseException(Object expected, Object found, JsonReader json) {
         this("Expected '" + expected + "', found '" + found + "'", json);
     }
 }

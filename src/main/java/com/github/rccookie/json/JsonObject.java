@@ -1,6 +1,7 @@
 package com.github.rccookie.json;
 
 import java.io.File;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -9,7 +10,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 import static com.github.rccookie.json.Json.INDENT;
 
@@ -21,8 +21,6 @@ import static com.github.rccookie.json.Json.INDENT;
  * this map does not allow the {@code null} key.
  */
 public class JsonObject extends HashMap<String, Object> implements JsonStructure {
-
-
 
     /**
      * Creates a new, empty json object.
@@ -177,99 +175,30 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
 
 
     /**
-     * @deprecated Use {@link #getElement(String)} instead for any json interaction.
-     *             If the "pure" value is needed use {@link #getAnything(String)}.
-     */
-    @Override
-    @Deprecated
-    public Object get(Object key) {
-        // This method must return the actual value to conform as map. Otherwise
-        // not the object that was mapped would be returned
-        return super.get(key);
-    }
-
-    /**
      * Returns the value mapped to the specified key, wrapped in a
-     * {@link JsonElement} with the default value {@code null}. If no mapping
-     * exists for the given key an empty json element will be returned.
+     * {@link JsonElement}. If no mapping exists for the given key an empty json
+     * element will be returned.
      * <p>This method never returns {@code null}.
      *
      * @param key The key to get the value for
      * @return A json element as described above
      */
     public JsonElement getElement(String key) {
-        return getElementOr(key, null);
+        return containsKey(key) ? new FullJsonElement(super.get(key)) : EmptyJsonElement.INSTANCE;
     }
 
-    /**
-     * Returns the value mapped to the specified key, wrapped in a
-     * {@link JsonElement} with given the default value. If no mapping
-     * exists for the given key an empty json element will be returned.
-     * <p>This method never returns {@code null}.
-     *
-     * @param key The key to get the value for
-     * @param defaultValue The default value returned if at some point
-     *                     no value is present
-     * @return A json element as described above
-     */
-    public JsonElement getElementOr(String key, Object defaultValue) {
-        return containsKey(Objects.requireNonNull(key, "Json objects don't permit 'null' as key")) ? new JsonElement(super.get(key), defaultValue) : new JsonElement.EmptyJsonElement(defaultValue);
+    @Override
+    public JsonElement getPath(String path) {
+        return getPath(Json.parsePath(path));
     }
-
-    /**
-     * Returns the value mapped to the specified key, wrapped in a
-     * {@link JsonElement} with given the default value generator. If no
-     * mapping exists for the given key an empty json element will be
-     * returned.
-     * <p>This method never returns {@code null}.
-     *
-     * @param key The key to get the value for
-     * @param defaultGetter A generator that will be used to generate a
-     *                      default value if at some point no value is
-     *                      present and the value is requested
-     * @return A json element as described above
-     */
-    public JsonElement getElementOrGet(String key, Supplier<?> defaultGetter) {
-        return containsKey(Objects.requireNonNull(key, "Json objects don't permit 'null' as key")) ? new JsonElement(super.get(key), defaultGetter) : new JsonElement.EmptyJsonElement(defaultGetter);
-    }
-
-
 
     @Override
     public JsonElement getPath(Object... path) {
-        return getPathOr(null, path);
-    }
-
-    @Override
-    public JsonElement getPathOr(Object defaultValue, Object... path) {
-        if(path.length == 0) return new JsonElement(this);
-        String key = path[0].toString();
-        Object[] otherPath = new Object[path.length - 1];
-        System.arraycopy(path, 1, otherPath, 0, otherPath.length);
-        return getElementOr(key, defaultValue).getPath(otherPath);
-    }
-
-    @Override
-    public JsonElement getPathOrGet(Supplier<?> defaultGetter, Object... path) {
-        if(path.length == 0) return new JsonElement(this);
-        String key = path[0].toString();
-        Object[] otherPath = new Object[path.length - 1];
-        System.arraycopy(path, 1, otherPath, 0, otherPath.length);
-        return getElementOrGet(key, defaultGetter).getPath(otherPath);
+        if(path.length == 0) return new FullJsonElement(this);
+        return getElement(path[0].toString()).getPath(Arrays.copyOfRange(path, 1, path.length));
     }
 
 
-
-    /**
-     * Returns the value mapped to the given key, or {@code null} if no mapping
-     * exists.
-     *
-     * @param key The key to get the value for
-     * @return The mapped value, or {@code null}
-     */
-    public Object getAnything(String key) {
-        return getElement(key).asAnything();
-    }
 
     /**
      * Returns the json object mapped to the given key, or {@code null} if no mapping
@@ -329,30 +258,6 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      */
     public Integer getInt(String key) {
         return getElement(key).asInt();
-    }
-
-    /**
-     * Returns the short to the given key, or {@code null} if no mapping
-     * exists. If a mapping exists but the given value is not a number,
-     * a {@link ClassCastException} will be thrown.
-     *
-     * @param key The key to get the value for
-     * @return The mapped short, or {@code null}
-     */
-    public Short getShort(String key) {
-        return getElement(key).asShort();
-    }
-
-    /**
-     * Returns the byte to the given key, or {@code null} if no mapping
-     * exists. If a mapping exists but the given value is not a number,
-     * a {@link ClassCastException} will be thrown.
-     *
-     * @param key The key to get the value for
-     * @return The mapped byte, or {@code null}
-     */
-    public Byte getByte(String key) {
-        return getElement(key).asByte();
     }
 
     /**
