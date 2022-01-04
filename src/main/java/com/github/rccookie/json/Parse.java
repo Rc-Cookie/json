@@ -26,7 +26,7 @@ public final class Parse {
         string = string.stripLeading().replace('\'', '"');
         if(!string.startsWith("null") && !string.startsWith("{"))
             string = "{" + string + "}";
-        return Json.parseObjectString(string);
+        return Json.parseObject(string);
     }
 
     /**
@@ -43,7 +43,7 @@ public final class Parse {
         string = string.stripLeading().replace('\'', '"');
         if(!string.startsWith("["))
             string = "[" + string + "]";
-        return Json.parseArrayString(string);
+        return Json.parseArray(string);
     }
 
     /**
