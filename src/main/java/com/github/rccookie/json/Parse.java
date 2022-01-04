@@ -1,7 +1,6 @@
 package com.github.rccookie.json;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * Utility class for parsing json-style strings into different formats.
@@ -21,7 +20,7 @@ public final class Parse {
      * @param string The string to parse
      * @return The parsed map
      */
-    public static Map<String, Object> map(String string) {
+    public static JsonObject map(String string) {
         if(string == null) return null;
         string = string.stripLeading().replace('\'', '"');
         if(!string.startsWith("null") && !string.startsWith("{"))
@@ -38,7 +37,7 @@ public final class Parse {
      * @param string The string to parse
      * @return The parsed list
      */
-    public static List<Object> list(String string) {
+    public static JsonArray list(String string) {
         if(string == null) return null;
         string = string.stripLeading().replace('\'', '"');
         if(!string.startsWith("["))
