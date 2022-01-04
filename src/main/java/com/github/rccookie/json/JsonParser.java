@@ -1,6 +1,11 @@
 package com.github.rccookie.json;
 
+import java.io.InputStreamReader;
 import java.io.Reader;
+import java.net.URL;
+import java.util.stream.Collectors;
+
+import javax.net.ssl.HttpsURLConnection;
 
 /**
  * Internal class to handle json parsing.
@@ -92,8 +97,6 @@ final class JsonParser {
             throw new JsonParseException("<value>", "<end of line>", json);
         String num = numberString.toString();
 
-        try { return Byte.   parseByte  (num); } catch(NumberFormatException ignored) { }
-        try { return Short.  parseShort (num); } catch(NumberFormatException ignored) { }
         try { return Integer.parseInt   (num); } catch(NumberFormatException ignored) { }
         try { return Long.   parseLong  (num); } catch(NumberFormatException ignored) { }
         try { return Float.  parseFloat (num); } catch(NumberFormatException ignored) { }
@@ -115,7 +118,8 @@ final class JsonParser {
                 else if(c == 'n') c = '\n';
                 else if(c == 'r') c = '\r';
                 else if(c == 'f') c = '\f';
-                else if(c != '\\' && c != '"') throw new JsonParseException("Unknown escape sequence: '\\" + c + "'", json);
+                else if(c == 'u') c = (char) Integer.parseInt(json.read(4), 16);
+                else if(c != '\\' && c != '/' && c != '"') throw new JsonParseException("Unknown escape sequence: '\\" + c + "'", json);
             }
             string.append(c);
         }
@@ -139,5 +143,22 @@ final class JsonParser {
 
     private static boolean noEndOfLine(char c) {
         return c != '\n' && c != ' ' && c != ',' && c != ']' && c != '}' && c != '/'; // '/' -> Comment
+    }
+
+
+    public static void main(String[] args) throws Exception {
+        HttpsURLConnection con = (HttpsURLConnection) new URL("https://create.kahoot.it/rest/kahoots").openConnection();
+        con.setRequestMethod("GET");
+
+        String params = Parse.map("{'username':'somekindamailadress@gmail.com','password':'Hoernchen06!','grant_type':'password'}")
+                .entrySet().stream().map(Object::toString).collect(Collectors.joining("&"));
+        con.setRequestProperty("Content-Type", "application/json");
+
+//        con.setDoOutput(true);
+//        DataOutputStream out = new DataOutputStream(con.getOutputStream());
+//        out.writeBytes(params);
+//        out.close();
+
+        System.out.println(Json.load(new InputStreamReader(con.getInputStream())));
     }
 }

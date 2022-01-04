@@ -133,6 +133,12 @@ class JsonReader {
         }
     }
 
+    public String read(int count) {
+        StringBuilder string = new StringBuilder(count);
+        for(int i=0; i<count; i++) string.append(read());
+        return string.toString();
+    }
+
     public JsonReader skipToContent() {
         if(skipWhitespaces().startsWith("//")) {
             int index = indexOf('\n');
