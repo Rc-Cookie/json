@@ -45,7 +45,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      * @param jsonString The json formatted string
      */
     public JsonObject(String jsonString) throws JsonParseException {
-        this(Json.parseObject(jsonString));
+        this(Json.parseObjectString(jsonString));
     }
 
     /**
@@ -311,7 +311,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      */
     @Override
     public boolean load(File file) throws JsonParseException {
-        JsonObject o = Json.loadObject(file);
+        JsonObject o = Json.parseObject(file);
         clear();
         if(o == null || o.isEmpty()) return false;
         putAll(o);

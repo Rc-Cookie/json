@@ -59,8 +59,8 @@ public final class Json {
      * @return The parsed object
      * @throws JsonParseException If the string does not follow json syntax
      */
-    public static JsonObject parseObject(String jsonString) throws JsonParseException {
-        return parse(jsonString).asObject();
+    public static JsonObject parseObjectString(String jsonString) throws JsonParseException {
+        return parseString(jsonString).asObject();
     }
 
     /**
@@ -71,8 +71,8 @@ public final class Json {
      * @return The parsed array
      * @throws JsonParseException If the string does not follow json syntax
      */
-    public static JsonArray parseArray(String jsonString) throws JsonParseException {
-        return parse(jsonString).asArray();
+    public static JsonArray parseArrayString(String jsonString) throws JsonParseException {
+        return parseString(jsonString).asArray();
     }
 
     /**
@@ -82,8 +82,8 @@ public final class Json {
      * @return The parsed structure
      * @throws JsonParseException If the string does not follow json syntax
      */
-    public static JsonElement parse(String jsonString) throws JsonParseException {
-        return load(new StringReader(jsonString));
+    public static JsonElement parseString(String jsonString) throws JsonParseException {
+        return parse(new StringReader(jsonString));
     }
 
 
@@ -98,8 +98,8 @@ public final class Json {
      * @return The parsed json object
      * @throws JsonParseException If the string does not follow json syntax
      */
-    public static JsonObject loadObject(String file) throws JsonParseException {
-        return load(file).asObject();
+    public static JsonObject parseObject(String file) throws JsonParseException {
+        return parse(file).asObject();
     }
 
     /**
@@ -112,8 +112,8 @@ public final class Json {
      * @return The parsed json array
      * @throws JsonParseException If the string does not follow json syntax
      */
-    public static JsonArray loadArray(String file) throws JsonParseException {
-        return load(file).asArray();
+    public static JsonArray parseArray(String file) throws JsonParseException {
+        return parse(file).asArray();
     }
 
     /**
@@ -124,9 +124,9 @@ public final class Json {
      * @return The parsed json element
      * @throws JsonParseException If the string does not follow json syntax
      */
-    public static JsonElement load(String file) throws JsonParseException {
+    public static JsonElement parse(String file) throws JsonParseException {
         try {
-            return load(new FileReader(file));
+            return parse(new FileReader(file));
         } catch(IOException e) {
             e.printStackTrace();
             return EmptyJsonElement.INSTANCE;
@@ -144,8 +144,8 @@ public final class Json {
      * @return The parsed json object
      * @throws JsonParseException If the string does not follow json syntax
      */
-    public static JsonObject loadObject(File file) throws JsonParseException {
-        return load(file).asObject();
+    public static JsonObject parseObject(File file) throws JsonParseException {
+        return parse(file).asObject();
     }
 
     /**
@@ -158,8 +158,8 @@ public final class Json {
      * @return The parsed json array
      * @throws JsonParseException If the string does not follow json syntax
      */
-    public static JsonArray loadArray(File file) throws JsonParseException {
-        return load(file).asArray();
+    public static JsonArray parseArray(File file) throws JsonParseException {
+        return parse(file).asArray();
     }
 
     /**
@@ -170,9 +170,9 @@ public final class Json {
      * @return The parsed json element
      * @throws JsonParseException If the string does not follow json syntax
      */
-    public static JsonElement load(File file) throws JsonParseException {
+    public static JsonElement parse(File file) throws JsonParseException {
         try {
-            return load(new FileReader(file));
+            return parse(new FileReader(file));
         } catch(IOException e) {
             e.printStackTrace();
             return EmptyJsonElement.INSTANCE;
@@ -190,8 +190,8 @@ public final class Json {
      * @return The parsed json object
      * @throws JsonParseException If the string does not follow json syntax
      */
-    public static JsonObject loadObject(Reader reader) throws JsonParseException {
-        return load(reader).asObject();
+    public static JsonObject parseObject(Reader reader) throws JsonParseException {
+        return parse(reader).asObject();
     }
 
     /**
@@ -204,8 +204,8 @@ public final class Json {
      * @return The parsed json array
      * @throws JsonParseException If the string does not follow json syntax
      */
-    public static JsonArray loadArray(Reader reader) throws JsonParseException {
-        return load(reader).asArray();
+    public static JsonArray parseArray(Reader reader) throws JsonParseException {
+        return parse(reader).asArray();
     }
 
     /**
@@ -216,7 +216,7 @@ public final class Json {
      * @return The parsed json element
      * @throws JsonParseException If the string does not follow json syntax
      */
-    public static JsonElement load(Reader reader) throws JsonParseException {
+    public static JsonElement parse(Reader reader) throws JsonParseException {
         try {
             JsonParser parser = new JsonParser(reader);
             JsonElement result = new FullJsonElement(parser.parseNextStructure());

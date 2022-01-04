@@ -53,7 +53,7 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      * @param jsonString The json formatted string
      */
     public JsonArray(String jsonString) throws JsonParseException {
-        this(Json.parseArray(jsonString));
+        this(Json.parseArrayString(jsonString));
     }
 
     /**
@@ -298,7 +298,7 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
     @Override
     public boolean load(File file) throws JsonParseException {
         clear();
-        JsonArray a = Json.loadArray(file);
+        JsonArray a = Json.parseArray(file);
         if(a == null) return false;
         addAll(a);
         return true;
