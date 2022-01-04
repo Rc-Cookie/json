@@ -1,11 +1,6 @@
 package com.github.rccookie.json;
 
-import java.io.InputStreamReader;
 import java.io.Reader;
-import java.net.URL;
-import java.util.stream.Collectors;
-
-import javax.net.ssl.HttpsURLConnection;
 
 /**
  * Internal class to handle json parsing.
@@ -143,22 +138,5 @@ final class JsonParser {
 
     private static boolean noEndOfLine(char c) {
         return c != '\n' && c != ' ' && c != ',' && c != ']' && c != '}' && c != '/'; // '/' -> Comment
-    }
-
-
-    public static void main(String[] args) throws Exception {
-        HttpsURLConnection con = (HttpsURLConnection) new URL("https://create.kahoot.it/rest/kahoots").openConnection();
-        con.setRequestMethod("GET");
-
-        String params = Parse.map("{'username':'somekindamailadress@gmail.com','password':'Hoernchen06!','grant_type':'password'}")
-                .entrySet().stream().map(Object::toString).collect(Collectors.joining("&"));
-        con.setRequestProperty("Content-Type", "application/json");
-
-//        con.setDoOutput(true);
-//        DataOutputStream out = new DataOutputStream(con.getOutputStream());
-//        out.writeBytes(params);
-//        out.close();
-
-        System.out.println(Json.load(new InputStreamReader(con.getInputStream())));
     }
 }
