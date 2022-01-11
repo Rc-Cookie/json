@@ -22,21 +22,18 @@ Reading a JSON file into Java object is very simple - there are several ways to 
     JsonArray a = new JsonArray(new File("yz.json"));
     
     // Option 2
-    o = Json.loadObject(new File("xy.json"));
-    a = Json.loadArray(new File("yz.json"));
-    
-    // Option 3
     o = Json.load(new File("xy.json")).asObject();
     a = Json.load(new File("yz.json")).asArray();
 ````
 
-The third option can also come in handy when you don't know whether the JSON file describes an object or an array.
+Option 1 will simply return `false` if an IOException occurres. The second option will throw an UncheckedIOException instead. Apart from that there is no difference from the two.
+
+The second option can also come in handy when you don't know whether the JSON file describes an object or an array.
 
 It is also possible to parse some JSON string that is already present as string, for example because you want to load the file yourself:
 
 ````java
     o = new JsonObject(jsonString);
-    o = Json.parseObject(jsonString);
     o = Json.parse(jsonString).asObject();
 ````
 
@@ -102,7 +99,7 @@ This process can be simplified by the use of `JsonElement`. The following is equ
 
 If the default value should be `null`, `orNull()` can be used instead, and if the default value should only be generated on demand, `orGet()` supports the use of `Supplier`.
 
-This can work because `JsonElement` can wrap any json value, both primitive and object-based. You can treat it as JsonObject, JsonArray, String and so on. If the value is not available at some point, it will ignore the following instructions and on demand return the previously specified default value.
+This can work because `JsonElement` can wrap any json value, both primitive and object-based. You can treat it as JsonObject, JsonArray, String and so on. If the value is not available at some point, it will ignore the following instructions and on demand return the specified default value instead.
 
 ---
 

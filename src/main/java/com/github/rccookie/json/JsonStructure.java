@@ -1,6 +1,7 @@
 package com.github.rccookie.json;
 
 import java.io.File;
+import java.io.IOException;
 
 /**
  * Superclass of {@link JsonObject} and {@link JsonArray}.
@@ -34,15 +35,59 @@ public interface JsonStructure extends Cloneable {
     }
 
     /**
+     * Returns this json structure wrapped in a {@link JsonElement}.
+     *
+     * @return This json structure as json element
+     */
+    default JsonElement asElement() {
+        return JsonElement.wrap(this);
+    }
+
+    /**
+     * Returns the number of elements in this structure.
+     *
+     * @return The size of this structure
+     */
+    int size();
+
+    /**
+     * Returns, whether this json structure contains the given
+     * element.
+     *
+     * @param o The element to test for containment
+     * @return Whether this json structure contains the given element
+     */
+    boolean contains(Object o);
+
+    /**
+     * Returns whether this json structure contains the given
+     * key or index.
+     *
+     * @param keyOrIndex The key or index to check for containment for
+     * @return Whether this json structure contains the given key or index
+     */
+    boolean containsKey(Object keyOrIndex);
+
+    /**
+     * Returns, whether this json structure contains the given
+     * value.
+     *
+     * @param o The value to test for containment
+     * @return Whether this json structure contains the given value
+     */
+    boolean containsValue(Object o);
+
+    /**
      * Assigns the value of the given json formatted file to this structure.
-     * If the file only contains "null" or an {@link java.io.IOException}
-     * occurres, the content of this json object will only be cleared.
-     * If the file defines a different type of structure than this one is, a
-     * {@link ClassCastException} will be thrown.
+     * If an {@link IOException} occurres, the content of this json structure
+     * will only be cleared.
      *
      * @param file The file to load from
      * @return Weather any assignment was done
      * @throws JsonParseException If the file does not follow json syntax
+     * @throws NullPointerException If the file contains the content {@code null}
+     * @throws ClassCastException If the file is valid but does not represent
+     *                            the required type of json structure
      */
     boolean load(File file);
 

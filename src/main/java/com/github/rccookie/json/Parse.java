@@ -25,7 +25,7 @@ public final class Parse {
         string = string.stripLeading().replace('\'', '"');
         if(!string.startsWith("null") && !string.startsWith("{"))
             string = "{" + string + "}";
-        return Json.parseObject(string);
+        return Json.parse(string).asObject();
     }
 
     /**
@@ -42,7 +42,7 @@ public final class Parse {
         string = string.stripLeading().replace('\'', '"');
         if(!string.startsWith("["))
             string = "[" + string + "]";
-        return Json.parseArray(string);
+        return Json.parse(string).asArray();
     }
 
     /**
@@ -57,5 +57,19 @@ public final class Parse {
     public static Object[] array(String string) {
         List<Object> list = list(string);
         return list == null ? null : list.toArray();
+    }
+
+    /**
+     * Parses the given string into a json element. The string has to be
+     * in json syntax and representing a json array or a json object, but
+     * single quotes with be threatened as double quotes, for convenience.
+     *
+     * @param string The string to parse
+     * @return The parsed element
+     */
+    public static JsonElement json(String string) {
+        if(string == null) return null;
+        string = string.stripLeading().replace('\'', '"');
+        return Json.parse(string);
     }
 }

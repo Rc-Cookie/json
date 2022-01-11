@@ -1,8 +1,10 @@
 package com.github.rccookie.json;
 
+import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 /**
  * Represents any json value like an object, an array, a string or
@@ -10,7 +12,12 @@ import java.util.function.Supplier;
  * data that may exist, but does not have to, and in that case would
  * get replaced by a default value.
  */
-public interface JsonElement {
+public interface JsonElement extends Iterable<JsonElement> {
+
+    /**
+     * Singleton constant for an empty json element.
+     */
+    JsonElement EMPTY = EmptyJsonElement.INSTANCE;
 
     /**
      * Returns the elements value.
@@ -18,7 +25,7 @@ public interface JsonElement {
      * @return The value of the json element
      * @throws NoSuchElementException If no value is present
      */
-    Object get();
+    <T> T get();
 
     /**
      * Returns the elements value as {@link JsonStructure}.
@@ -61,12 +68,22 @@ public interface JsonElement {
     String asString();
 
     /**
+     * Returns the elements value as a number.
+     *
+     * @return The value of the json element as number
+     * @throws NoSuchElementException If no value is present
+     * @throws ClassCastException If a non-null value is present
+     *                            and is not a number
+     */
+    Number asNumber();
+
+    /**
      * Returns the elements value as {@code long}.
      *
      * @return The value of the json element as long
      * @throws NoSuchElementException If no value is present
      * @throws ClassCastException If a non-null value is present and
-     *                            is not a long
+     *                            is not a number
      */
     Long asLong();
 
@@ -76,7 +93,7 @@ public interface JsonElement {
      * @return The value of the json element as int
      * @throws NoSuchElementException If no value is present
      * @throws ClassCastException If a non-null value is present and
-     *                            is not an int
+     *                            is not a number
      */
     Integer asInt();
 
@@ -86,7 +103,7 @@ public interface JsonElement {
      * @return The value of the json element as double
      * @throws NoSuchElementException If no value is present
      * @throws ClassCastException If a non-null value is present and
-     *                            is not a double
+     *                            is not a number
      */
     Double asDouble();
 
@@ -96,7 +113,7 @@ public interface JsonElement {
      * @return The value of the json element as float
      * @throws NoSuchElementException If no value is present
      * @throws ClassCastException If a non-null value is present and
-     *                            is not a float
+     *                            is not a number
      */
     Float asFloat();
 
@@ -145,35 +162,11 @@ public interface JsonElement {
 
     /**
      * Returns {@code true} if this element contains a value and the value
-     * is either {@code null} or an instance of {@code long}.
+     * is either {@code null} or an instance of {@code Number}.
      *
-     * @return Whether this element contains a long
+     * @return Whether this element contains a number
      */
-    boolean isLong();
-
-    /**
-     * Returns {@code true} if this element contains a value and the value
-     * is either {@code null} or an instance of {@code int}.
-     *
-     * @return Whether this element contains an int
-     */
-    boolean isInt();
-
-    /**
-     * Returns {@code true} if this element contains a value and the value
-     * is either {@code null} or an instance of {@code double}.
-     *
-     * @return Whether this element contains a double
-     */
-    boolean isDouble();
-
-    /**
-     * Returns {@code true} if this element contains a value and the value
-     * is either {@code null} or an instance of {@code float}.
-     *
-     * @return Whether this element contains a float
-     */
-    boolean isFloat();
+    boolean isNumber();
 
     /**
      * Returns {@code true} if this element contains a value and the value
@@ -239,26 +232,7 @@ public interface JsonElement {
      * @param ifNotPresent The value to use if no non-null value is present
      * @return A json element with a non-null value
      */
-    JsonElement or(Object ifNotPresent);
-
-    /**
-     * Returns this element if a non-null value is present, or the specified
-     * json element if this one is empty.
-     *
-     * @param useIfNotPresent The element to use if no non-null value is present
-     * @return This or the given json element
-     */
-    JsonElement orElse(JsonElement useIfNotPresent);
-
-    /**
-     * Returns this element if a non-null value is present, or gets the specified
-     * json element if this one is empty.
-     *
-     * @param useIfNotPresent Supplier for element to use if no non-null value
-     *                        is present
-     * @return This or the supplied json element
-     */
-    JsonElement orElse(Supplier<JsonElement> useIfNotPresent);
+    <T> T or(T ifNotPresent);
 
     /**
      * Returns this element if a non-null value is present, or a json element
@@ -268,7 +242,26 @@ public interface JsonElement {
      *                        is present
      * @return A json element with a non-null value
      */
-    JsonElement orGet(Supplier<?> getIfNotPresent);
+    <T> T orGet(Supplier<T> getIfNotPresent);
+
+    /**
+     * Returns this element if a non-null value is present, or the specified
+     * json element if this one is empty.
+     *
+     * @param useIfNotPresent The element to use if no non-null value is present
+     * @return This or the given json element
+     */
+    <T> T orElse(JsonElement useIfNotPresent);
+
+    /**
+     * Returns this element if a non-null value is present, or gets the specified
+     * json element if this one is empty.
+     *
+     * @param useIfNotPresent Supplier for element to use if no non-null value
+     *                        is present
+     * @return This or the supplied json element
+     */
+    <T> T orElse(Supplier<JsonElement> useIfNotPresent);
 
 
     /**
@@ -278,26 +271,7 @@ public interface JsonElement {
      * @param ifNotPresent The value to use if no value is present
      * @return A json element with a value present
      */
-    JsonElement nullOr(Object ifNotPresent);
-
-    /**
-     * Returns this element if a value is present, or the specified json
-     * element if this one is empty.
-     *
-     * @param useIfNotPresent The element to use if no value is present
-     * @return This or the given json element
-     */
-    JsonElement nullOrElse(JsonElement useIfNotPresent);
-
-    /**
-     * Returns this element if a value is present, or gets a json element
-     * from the specified supplier if this one is empty.
-     *
-     * @param useIfNotPresent The json element supplier to use if no value
-     *                        is present
-     * @return This or the supplied json element
-     */
-    JsonElement nullOrElse(Supplier<JsonElement> useIfNotPresent);
+    <T> T nullOr(T ifNotPresent);
 
     /**
      * Returns this element if a value is present, or a json element with
@@ -307,7 +281,26 @@ public interface JsonElement {
      *                        present
      * @return A json element with a value present
      */
-    JsonElement nullOrGet(Supplier<?> getIfNotPresent);
+    <T> T nullOrGet(Supplier<T> getIfNotPresent);
+
+    /**
+     * Returns this element if a value is present, or the specified json
+     * element if this one is empty.
+     *
+     * @param useIfNotPresent The element to use if no value is present
+     * @return This or the given json element
+     */
+    <T> T nullOrElse(JsonElement useIfNotPresent);
+
+    /**
+     * Returns this element if a value is present, or gets a json element
+     * from the specified supplier if this one is empty.
+     *
+     * @param useIfNotPresent The json element supplier to use if no value
+     *                        is present
+     * @return This or the supplied json element
+     */
+    <T> T nullOrElse(Supplier<JsonElement> useIfNotPresent);
 
     /**
      * Returns this element if a value is present, or a json element with
@@ -315,7 +308,7 @@ public interface JsonElement {
      *
      * @return A json element with a value present
      */
-    JsonElement orNull();
+    <T> T orNull();
 
 
     /**
@@ -346,4 +339,123 @@ public interface JsonElement {
      * @return Whether a non-null value is present
      */
     boolean isNotNull();
+
+
+    /**
+     * Returns an iterator iterating over the elements of the
+     * json array contained in this element.
+     * <p>If this element has the value {@code null} or no value
+     * is present, the returned iterator will iterate over no
+     * elements.
+     *
+     * @return An iterator over the element of the contained array
+     * @throws ClassCastException If an element is present, but it
+     *                            is not a json array
+     */
+    @Override
+    Iterator<JsonElement> iterator();
+
+    /**
+     * Returns a stream over the elements of the json array contained in
+     * this element.
+     * <p>If this element has the value {@code null} or no value is
+     * present, the stream will have no contents.
+     *
+     * @return A stream over the elements of the contained array
+     * @throws ClassCastException If an element is present, but it is not
+     *                            a json array
+     */
+    Stream<JsonElement> stream();
+
+    /**
+     * Returns the size of the contained json structure.
+     * <p>If the value of this element is {@code null} or no value is
+     * present, {@code 0} will be returned.
+     *
+     * @return The size of the contained structure
+     * @throws ClassCastException If an element is present, but it is
+     *                            not a json structure
+     */
+    int size();
+
+    /**
+     * Returns, whether this json structure contains the given
+     * object. In case of a json object this will be equivalent
+     * to {@code containsKey(o)}.
+     * <p>If the value of this element is {@code null} or no value
+     * is present, {@code false} will be returned.
+     *
+     * @param o The object to check for containment for
+     * @return Whether the contained json structure contains the
+     *         specified element
+     * @throws ClassCastException If an element is present, but it
+     *                            is not a json structure
+     */
+    boolean contains(Object o);
+
+    /**
+     * Returns, whether this json structure contains the given
+     * key or index. In case of a json array this will return whether
+     * the given key is within bounds or the array.
+     * <p>If the value of this element is {@code null} or no value
+     * is present, {@code false} will be returned.
+     *
+     * @param keyOrIndex The key or index to check for containment for
+     * @return Whether the contained json structure contains the
+     *         specified key or index
+     * @throws ClassCastException If an element is present, but it
+     *                            is not a json structure
+     */
+    boolean containsKey(String keyOrIndex);
+
+    /**
+     * Returns, whether this json structure contains the given
+     * value. In case of a json array this will be equivalent
+     * to {@code contains(o)}.
+     * <p>If the value of this element is {@code null} or no value
+     * is present, {@code false} will be returned.
+     *
+     * @param o The object to check for containment for
+     * @return Whether the contained json structure contains the
+     *         specified element
+     * @throws ClassCastException If an element is present, but it
+     *                            is not a json structure
+     */
+    boolean containsValue(Object o);
+
+    /**
+     * Returns a string representation of this json element, that
+     * is, the {@code toString()} value from it's contained object.
+     * For the value {@code null} the string {@code "null"} will be
+     * returned.
+     *
+     * @return The string representation of the contained object
+     * @throws NoSuchElementException If no value is present
+     */
+    @Override
+    String toString();
+
+
+    /**
+     * Returns the specified object wrapped in a json element,
+     * or an empty json element if the object has the value
+     * {@code null}.
+     *
+     * @param o The object to wrap
+     * @return A json element with the specified value, or an
+     *         empty json element
+     */
+    static JsonElement wrap(Object o) {
+        return o != null ? new FullJsonElement(o) : EMPTY;
+    }
+
+    /**
+     * Returns the specified element wrapped in a json element.
+     *
+     * @param o The object to wrap
+     * @return A json element with the specified value
+     */
+    static JsonElement wrapNullable(Object o) {
+        return new FullJsonElement(o);
+    }
 }

@@ -1,21 +1,73 @@
 package com.github.rccookie.json;
 
+import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
+/**
+ * Represents json elements with no value present.
+ */
 enum EmptyJsonElement implements JsonElement {
 
     INSTANCE;
 
+    static final Iterator<JsonElement> EMPTY_ITERATOR = new Iterator<>() {
+        @Override
+        public boolean hasNext() {
+            return false;
+        }
+
+        @Override
+        public JsonElement next() {
+            throw new NoSuchElementException();
+        }
+    };
+
     @Override
     public String toString() {
-        return "<No value>";
+        // The exception is better because toString() may not only be used for
+        // debugging purposes but also to get the string representation without
+        // calling get, which assumes that a value is present. Therefore, an
+        // exception should be thrown if it is not.
+        throw new NoSuchElementException("Cannot generate toString() value because no value is present");
+//        return "<No value>";
     }
 
     @Override
-    public Object get() {
+    public Iterator<JsonElement> iterator() {
+        return EMPTY_ITERATOR;
+    }
+
+    @Override
+    public Stream<JsonElement> stream() {
+        return Stream.empty();
+    }
+
+    @Override
+    public int size() {
+        return 0;
+    }
+
+    @Override
+    public boolean contains(Object o) {
+        return false;
+    }
+
+    @Override
+    public boolean containsKey(String keyOrIndex) {
+        return false;
+    }
+
+    @Override
+    public boolean containsValue(Object o) {
+        return false;
+    }
+
+    @Override
+    public <T> T get() {
         throw new NoSuchElementException();
     }
 
@@ -36,6 +88,11 @@ enum EmptyJsonElement implements JsonElement {
 
     @Override
     public String asString() {
+        throw new NoSuchElementException();
+    }
+
+    @Override
+    public Number asNumber() {
         throw new NoSuchElementException();
     }
 
@@ -85,22 +142,7 @@ enum EmptyJsonElement implements JsonElement {
     }
 
     @Override
-    public boolean isLong() {
-        return false;
-    }
-
-    @Override
-    public boolean isInt() {
-        return false;
-    }
-
-    @Override
-    public boolean isDouble() {
-        return false;
-    }
-
-    @Override
-    public boolean isFloat() {
+    public boolean isNumber() {
         return false;
     }
 
@@ -131,48 +173,48 @@ enum EmptyJsonElement implements JsonElement {
     }
 
     @Override
-    public JsonElement or(Object ifNotPresent) {
-        return new FullJsonElement(Objects.requireNonNull(ifNotPresent));
+    public <T> T or(T ifNotPresent) {
+        return Objects.requireNonNull(ifNotPresent);
     }
 
     @Override
-    public JsonElement orElse(JsonElement useIfNotPresent) {
-        return Objects.requireNonNull(Objects.requireNonNull(useIfNotPresent));
+    public <T> T orGet(Supplier<T> getIfNotPresent) {
+        return Objects.requireNonNull(getIfNotPresent.get());
     }
 
     @Override
-    public JsonElement orElse(Supplier<JsonElement> useIfNotPresent) {
-        return Objects.requireNonNull(Objects.requireNonNull(useIfNotPresent.get()));
-    }
-
-    @Override
-    public JsonElement orGet(Supplier<?> getIfNotPresent) {
-        return new FullJsonElement(Objects.requireNonNull(getIfNotPresent.get()));
-    }
-
-    @Override
-    public JsonElement nullOr(Object ifNotPresent) {
-        return new FullJsonElement(ifNotPresent);
-    }
-
-    @Override
-    public JsonElement nullOrElse(JsonElement useIfNotPresent) {
-        return Objects.requireNonNull(useIfNotPresent);
-    }
-
-    @Override
-    public JsonElement nullOrElse(Supplier<JsonElement> useIfNotPresent) {
+    public <T> T orElse(JsonElement useIfNotPresent) {
         return Objects.requireNonNull(useIfNotPresent.get());
     }
 
     @Override
-    public JsonElement nullOrGet(Supplier<?> getIfNotPresent) {
-        return new FullJsonElement(getIfNotPresent.get());
+    public <T> T orElse(Supplier<JsonElement> useIfNotPresent) {
+        return Objects.requireNonNull(useIfNotPresent.get().get());
     }
 
     @Override
-    public JsonElement orNull() {
-        return new FullJsonElement(null);
+    public <T> T nullOr(T ifNotPresent) {
+        return ifNotPresent;
+    }
+
+    @Override
+    public <T> T nullOrGet(Supplier<T> getIfNotPresent) {
+        return getIfNotPresent.get();
+    }
+
+    @Override
+    public <T> T nullOrElse(JsonElement useIfNotPresent) {
+        return useIfNotPresent.get();
+    }
+
+    @Override
+    public <T> T nullOrElse(Supplier<JsonElement> useIfNotPresent) {
+        return useIfNotPresent.get().get();
+    }
+
+    @Override
+    public <T> T orNull() {
+        return null;
     }
 
     @Override

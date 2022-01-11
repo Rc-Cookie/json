@@ -1,15 +1,14 @@
 package com.github.rccookie.json;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.IdentityHashMap;
-import java.util.Set;
-import java.util.function.Supplier;
+import java.util.Iterator;
 
-import static com.github.rccookie.json.Json.INDENT;
+import com.github.rccookie.util.IterableIterator;
 
 /**
  * Represents an abstract json array. A json array can hold any
@@ -20,12 +19,6 @@ import static com.github.rccookie.json.Json.INDENT;
  * arrays they are not of a fixed size.
  */
 public class JsonArray extends ArrayList<Object> implements JsonStructure {
-
-
-
-    private static final Supplier<Object> OUT_OF_BOUNDS_THROWER = () -> {
-        throw new IndexOutOfBoundsException();
-    };
 
 
 
@@ -53,7 +46,7 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      * @param jsonString The json formatted string
      */
     public JsonArray(String jsonString) throws JsonParseException {
-        this(Json.parseArray(jsonString));
+        this(Json.parse(jsonString).asArray());
     }
 
     /**
@@ -97,7 +90,7 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      */
     @Override
     public String toString() {
-        return toString(Json.DEFAULT_FORMATTED);
+        return Json.toString(this);
     }
 
     /**
@@ -116,30 +109,36 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      */
     @Override
     public String toString(boolean formatted) {
-        return toString(Collections.newSetFromMap(new IdentityHashMap<>()), formatted, 0);
+        return Json.toString(this, formatted);
     }
 
-    String toString(Set<Object> blacklist, boolean formatted, int level) {
-        if(isEmpty()) return "[]";
-
-        blacklist.add(this);
-        StringBuilder string = new StringBuilder();
-        string.append('[');
-        for(Object o : this) {
-            if(blacklist.contains(o))
-                throw new NestedJsonException();
-            if(formatted) string.append('\n').append(INDENT.repeat(level + 1));
-            string.append(Json.stringFor(o, blacklist, formatted, level + 1)).append(',');
-        }
-
-        string.deleteCharAt(string.length() - 1);
-        if(formatted) string.append('\n').append(INDENT.repeat(level));
-        string.append(']');
-
-        return string.toString();
+    /**
+     * Returns whether the given index is within bounds of this json
+     * array.
+     * <p>If the given value is not a number or {@code null},
+     * {@code false} will be returned.
+     *
+     * @param index The index to check for containment for
+     * @return Whether this json array has the specified index
+     */
+    @Override
+    public boolean containsKey(Object index) {
+        return index instanceof Number &&
+                ((Number) index).intValue() >= 0 &&
+                ((Number) index).intValue() < size();
     }
 
-
+    /**
+     * Returns, whether this json array contains the specified value.
+     * Equivalent to {@link #contains(Object)}.
+     *
+     * @param o The value to test for containment
+     * @return Whether this json array contains the given value
+     */
+    @Override
+    public boolean containsValue(Object o) {
+        return contains(o);
+    }
 
     /**
      * Returns the value of the specified index, wrapped in a {@link JsonElement}
@@ -152,7 +151,7 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      * @return A json element as described above
      */
     public JsonElement getElement(int index) {
-        return index < size() ? new FullJsonElement(get(index)) : EmptyJsonElement.INSTANCE;
+        return index < size() ? JsonElement.wrapNullable(get(index)) : JsonElement.EMPTY;
     }
 
 
@@ -163,7 +162,7 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
 
     @Override
     public JsonElement getPath(Object... path) {
-        if(path.length == 0) return new FullJsonElement(this);
+        if(path.length == 0) return asElement();
         int index = path[0] instanceof Integer ? (int)path[0] : Integer.parseInt(path[0].toString());
         return getElement(index).getPath(Arrays.copyOfRange(path, 1, path.length));
     }
@@ -181,7 +180,7 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      * @return The json object at the specified index
      */
     public JsonObject getObject(int index) {
-        return getElement(index).orGet(OUT_OF_BOUNDS_THROWER).asObject();
+        return (JsonObject) get(index);
     }
 
     /**
@@ -195,7 +194,7 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      * @return The json array at the specified index
      */
     public JsonArray getArray(int index) {
-        return getElement(index).orGet(OUT_OF_BOUNDS_THROWER).asArray();
+        return (JsonArray) get(index);
     }
 
     /**
@@ -209,7 +208,7 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      * @return The string at the specified index
      */
     public String getString(int index) {
-        return getElement(index).orGet(OUT_OF_BOUNDS_THROWER).asString();
+        return (String) get(index);
     }
 
     /**
@@ -223,7 +222,8 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      * @return The long at the specified index
      */
     public Long getLong(int index) {
-        return getElement(index).orGet(OUT_OF_BOUNDS_THROWER).asLong();
+        Object value = get(index);
+        return value == null ? null : ((Number) value).longValue();
     }
 
     /**
@@ -237,7 +237,8 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      * @return The integer at the specified index
      */
     public Integer getInt(int index) {
-        return getElement(index).orGet(OUT_OF_BOUNDS_THROWER).asInt();
+        Object value = get(index);
+        return value == null ? null : ((Number) value).intValue();
     }
 
     /**
@@ -251,7 +252,8 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      * @return The double at the specified index
      */
     public Double getDouble(int index) {
-        return getElement(index).orGet(OUT_OF_BOUNDS_THROWER).asDouble();
+        Object value = get(index);
+        return value == null ? null : ((Number) value).doubleValue();
     }
 
     /**
@@ -265,7 +267,8 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      * @return The float at the specified index
      */
     public Float getFloat(int index) {
-        return getElement(index).orGet(OUT_OF_BOUNDS_THROWER).asFloat();
+        Object value = get(index);
+        return value == null ? null : ((Number) value).floatValue();
     }
 
     /**
@@ -279,29 +282,54 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      * @return The boolean at the specified index
      */
     public Boolean getBool(int index) {
-        return getElement(index).orGet(OUT_OF_BOUNDS_THROWER).asBool();
+        return (Boolean) get(index);
+    }
+
+
+    /**
+     * Returns an {@link IterableIterator} over the elements in this
+     * array, each wrapped in a {@link JsonElement}.
+     *
+     * @return An IterableIterator over the json elements of this array
+     */
+    public IterableIterator<JsonElement> elements() {
+        Iterator<JsonElement> it = stream().map(JsonElement::wrapNullable).iterator();
+        return new IterableIterator<>() {
+            @Override
+            public boolean hasNext() {
+                return it.hasNext();
+            }
+
+            @Override
+            public JsonElement next() {
+                return it.next();
+            }
+        };
     }
 
 
 
     /**
      * Assigns the value of the given json formatted file to this array.
-     * If the file only contains "null" or an {@link java.io.IOException}
-     * occurres, the content of this json array will only be cleared.
-     * If the file defines a json array instead of an object, a
-     * {@link ClassCastException} will be thrown.
+     * If an {@link IOException} occurres, the content of this json array
+     * will only be cleared.
      *
      * @param file The file to load from
      * @return Weather any assignment was done
      * @throws JsonParseException If the file does not follow json syntax
+     * @throws NullPointerException If the file contains the content {@code null}
+     * @throws ClassCastException If the file is valid but does not represent
+     *                            a json array
      */
     @Override
     public boolean load(File file) throws JsonParseException {
         clear();
-        JsonArray a = Json.loadArray(file);
-        if(a == null) return false;
-        addAll(a);
-        return true;
+        try {
+            addAll(Json.load(file).asArray());
+            return true;
+        } catch(UncheckedIOException e) {
+            return false;
+        }
     }
 
     /**
@@ -313,6 +341,11 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      */
     @Override
     public boolean store(File file) {
-        return Json.store(this, file);
+        try {
+            Json.store(this, file);
+            return true;
+        } catch(UncheckedIOException e) {
+            return false;
+        }
     }
 }

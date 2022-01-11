@@ -1,17 +1,14 @@
 package com.github.rccookie.json;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
-
-import static com.github.rccookie.json.Json.INDENT;
 
 /**
  * Represents an abstract json object. A json object can hold any
@@ -32,8 +29,9 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      *
      * @param copy The map describing the mappings to do.
      */
-    public JsonObject(Map<? extends String, ?> copy) {
-        super(checkNoNullKeys(copy));
+    public JsonObject(Map<?,?> copy) {
+        for(Entry<?,?> e : copy.entrySet())
+            put(Objects.toString(Objects.requireNonNull(e.getKey(), "Json objects don't permit 'null' as key")), e.getValue());
     }
 
     /**
@@ -45,7 +43,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      * @param jsonString The json formatted string
      */
     public JsonObject(String jsonString) throws JsonParseException {
-        this(Json.parseObject(jsonString));
+        this(Json.parse(jsonString).asObject());
     }
 
     /**
@@ -89,7 +87,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      */
     @Override
     public String toString() throws NestedJsonException {
-        return toString(Json.DEFAULT_FORMATTED);
+        return Json.toString(this);
     }
 
     /**
@@ -108,31 +106,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      */
     @Override
     public String toString(boolean formatted) {
-        return toString(Collections.newSetFromMap(new IdentityHashMap<>()), formatted, 0);
-    }
-
-    String toString(Set<Object> blacklist, boolean formatted, int level) {
-        if(isEmpty()) return "{}";
-
-        StringBuilder string = new StringBuilder();
-        string.append('{');
-        blacklist.add(this);
-
-        for(Entry<String, Object> member : entrySet()) {
-            if (blacklist.contains(member.getValue()))
-                throw new NestedJsonException();
-            if(formatted) string.append('\n').append(INDENT.repeat(level + 1));
-            string.append(Json.stringFor(member.getKey())).append(':');
-            if(formatted) string.append(' ');
-            string.append(Json.stringFor(member.getValue(), blacklist, formatted, level + 1)).append(',');
-        }
-
-        string.deleteCharAt(string.length() - 1);
-        if(formatted) string.append('\n').append(INDENT.repeat(level));
-        string.append('}');
-
-        blacklist.remove(this); // Allow same instances 'next to each other'
-        return string.toString();
+        return Json.toString(this);
     }
 
 
@@ -172,7 +146,17 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
         return m;
     }
 
-
+    /**
+     * Returns whether this json object contains the specified key.
+     * This is equivalent to {@link #containsKey(Object)}.
+     *
+     * @param key The key to test for containment
+     * @return Whether this json object contains the given key
+     */
+    @Override
+    public boolean contains(Object key) {
+        return containsKey(key);
+    }
 
     /**
      * Returns the value mapped to the specified key, wrapped in a
@@ -184,7 +168,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      * @return A json element as described above
      */
     public JsonElement getElement(String key) {
-        return containsKey(key) ? new FullJsonElement(super.get(key)) : EmptyJsonElement.INSTANCE;
+        return containsKey(key) ? JsonElement.wrapNullable(get(key)) : JsonElement.EMPTY;
     }
 
     @Override
@@ -194,7 +178,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
 
     @Override
     public JsonElement getPath(Object... path) {
-        if(path.length == 0) return new FullJsonElement(this);
+        if(path.length == 0) return asElement();
         return getElement(path[0].toString()).getPath(Arrays.copyOfRange(path, 1, path.length));
     }
 
@@ -300,33 +284,41 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
 
     /**
      * Assigns the value of the given json formatted file to this object.
-     * If the file only contains "null" or an {@link java.io.IOException}
-     * occurs, the content of this json object will only be cleared.
-     * If the file defines a json array instead of an object, a
-     * {@link ClassCastException} will be thrown.
+     * If an {@link IOException} occurres, the content of this json object
+     * will only be cleared.
      *
      * @param file The file to load from
      * @return Weather any assignment was done
      * @throws JsonParseException If the file does not follow json syntax
+     * @throws NullPointerException If the file contains the content {@code null}
+     * @throws ClassCastException If the file is valid but does not represent
+     *                            a json object
      */
     @Override
     public boolean load(File file) throws JsonParseException {
-        JsonObject o = Json.loadObject(file);
         clear();
-        if(o == null || o.isEmpty()) return false;
-        putAll(o);
-        return true;
+        try {
+            putAll(Json.load(file).asObject());
+            return true;
+        } catch(UncheckedIOException e) {
+            return false;
+        }
     }
 
     /**
      * Stores this json object in the given file. The file will be cleared
      * if it exists, otherwise a new file will be created.
      *
-     * @param file The file to store the object in
+     * @param file The file to store the structure in
      * @return Weather the storing was successful
      */
     @Override
     public boolean store(File file) {
-        return Json.store(this, file);
+        try {
+            Json.store(this, file);
+            return true;
+        } catch(UncheckedIOException e) {
+            return false;
+        }
     }
 }

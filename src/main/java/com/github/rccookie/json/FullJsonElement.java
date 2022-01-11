@@ -1,9 +1,15 @@
 package com.github.rccookie.json;
 
+import java.util.Iterator;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
+/**
+ * Represents a json element with a value (possibly {@code null}) present.
+ */
 class FullJsonElement implements JsonElement {
 
     final Object value;
@@ -18,8 +24,39 @@ class FullJsonElement implements JsonElement {
     }
 
     @Override
+    public Iterator<JsonElement> iterator() {
+        return value == null ? EmptyJsonElement.EMPTY_ITERATOR : asArray().elements();
+    }
+
+    @Override
+    public Stream<JsonElement> stream() {
+        return value == null ? Stream.empty() : StreamSupport.stream(spliterator(), false);
+    }
+
+    @Override
+    public int size() {
+        return value == null ? 0 : ((JsonStructure) value).size();
+    }
+
+    @Override
+    public boolean contains(Object o) {
+        return value != null && ((JsonStructure) value).contains(o);
+    }
+
+    @Override
+    public boolean containsKey(String keyOrIndex) {
+        return value != null && ((JsonStructure) value).containsKey(keyOrIndex);
+    }
+
+    @Override
+    public boolean containsValue(Object o) {
+        return value != null && ((JsonElement) value).containsValue(o);
+    }
+
+    @Override
     public boolean equals(Object o) {
-        return o instanceof FullJsonElement && Objects.equals(((FullJsonElement) o).value, value);
+        return (o instanceof FullJsonElement && Objects.equals(((FullJsonElement) o).value, value))
+                || Objects.equals(o, value);
     }
 
     @Override
@@ -27,9 +64,10 @@ class FullJsonElement implements JsonElement {
         return Objects.hashCode(value);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
-    public Object get() {
-        return value;
+    public <T> T get() {
+        return (T) value;
     }
 
     @Override
@@ -50,6 +88,11 @@ class FullJsonElement implements JsonElement {
     @Override
     public String asString() {
         return (String) value;
+    }
+
+    @Override
+    public Number asNumber() {
+        return (Number) value;
     }
 
     @Override
@@ -74,7 +117,7 @@ class FullJsonElement implements JsonElement {
 
     @Override
     public Boolean asBool() {
-        return value != null ? (boolean) value : null;
+        return (Boolean) value;
     }
 
 
@@ -99,23 +142,8 @@ class FullJsonElement implements JsonElement {
     }
 
     @Override
-    public boolean isLong() {
-        return value == null || value instanceof Long;
-    }
-
-    @Override
-    public boolean isInt() {
-        return value == null || value instanceof Integer;
-    }
-
-    @Override
-    public boolean isDouble() {
-        return value == null || value instanceof Double;
-    }
-
-    @Override
-    public boolean isFloat() {
-        return value == null || value instanceof Float;
+    public boolean isNumber() {
+        return value == null || value instanceof Number;
     }
 
     @Override
@@ -126,73 +154,74 @@ class FullJsonElement implements JsonElement {
 
     @Override
     public JsonElement get(String key) {
-        return value == null ? EmptyJsonElement.INSTANCE : ((JsonObject) value).getElement(key);
+        return value == null ? JsonElement.EMPTY : ((JsonObject) value).getElement(key);
     }
 
     @Override
     public JsonElement get(int index) {
         if(value == null) {
             if(index < 0) throw new IndexOutOfBoundsException(index);
-            return EmptyJsonElement.INSTANCE;
+            return JsonElement.EMPTY;
         }
         return ((JsonArray) value).getElement(index);
     }
 
     @Override
     public JsonElement getPath(String path) {
-        return value == null ? EmptyJsonElement.INSTANCE : ((JsonStructure) value).getPath(path);
+        return value == null ? JsonElement.EMPTY : ((JsonStructure) value).getPath(path);
     }
 
     @Override
     public JsonElement getPath(Object... path) {
         if(path.length == 0) return this;
-        return value == null ? EmptyJsonElement.INSTANCE : ((JsonStructure) value).getPath(path);
+        return value == null ? JsonElement.EMPTY : ((JsonStructure) value).getPath(path);
     }
 
 
     @Override
-    public JsonElement or(Object ifNotPresent) {
-        return value == null ? new FullJsonElement(Objects.requireNonNull(ifNotPresent)) : this;
+    public <T> T or(T ifNotPresent) {
+        return value == null ? Objects.requireNonNull(ifNotPresent) : get();
     }
 
     @Override
-    public JsonElement orElse(JsonElement useIfNotPresent) {
-        return value == null ? Objects.requireNonNull(useIfNotPresent) : this;
+    public <T> T orGet(Supplier<T> getIfNotPresent) {
+        return value == null ? Objects.requireNonNull(getIfNotPresent.get()) : get();
+    }
+
+
+    @Override
+    public <T> T orElse(JsonElement useIfNotPresent) {
+        return value == null ? Objects.requireNonNull(useIfNotPresent).get() : get();
     }
 
     @Override
-    public JsonElement orElse(Supplier<JsonElement> useIfNotPresent) {
-        return value == null ? Objects.requireNonNull(useIfNotPresent.get()) : this;
+    public <T> T orElse(Supplier<JsonElement> useIfNotPresent) {
+        return value == null ? Objects.requireNonNull(useIfNotPresent.get()).get() : get();
     }
 
     @Override
-    public JsonElement orGet(Supplier<?> getIfNotPresent) {
-        return value == null ? new FullJsonElement(Objects.requireNonNull(getIfNotPresent.get())) : this;
+    public <T> T nullOr(T ifNotPresent) {
+        return get();
     }
 
     @Override
-    public JsonElement nullOr(Object ifNotPresent) {
-        return this;
+    public <T> T nullOrGet(Supplier<T> getIfNotPresent) {
+        return get();
     }
 
     @Override
-    public JsonElement nullOrElse(JsonElement useIfNotPresent) {
-        return this;
+    public <T> T nullOrElse(JsonElement useIfNotPresent) {
+        return get();
     }
 
     @Override
-    public JsonElement nullOrElse(Supplier<JsonElement> useIfNotPresent) {
-        return this;
+    public <T> T nullOrElse(Supplier<JsonElement> useIfNotPresent) {
+        return get();
     }
 
     @Override
-    public JsonElement nullOrGet(Supplier<?> getIfNotPresent) {
-        return this;
-    }
-
-    @Override
-    public JsonElement orNull() {
-        return this;
+    public <T> T orNull() {
+        return get();
     }
 
     @Override
