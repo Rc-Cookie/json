@@ -215,7 +215,7 @@ public final class Json {
      * @param jsonString The string for the parser to parse
      * @return A JsonParser over the given string
      */
-    public JsonParser getParser(String jsonString) {
+    public static JsonParser getParser(String jsonString) {
         return new JsonParser(new StringReader(jsonString));
     }
 
@@ -227,7 +227,7 @@ public final class Json {
      * @throws UncheckedIOException If an {@link IOException} occurres while
      *                              opening the file
      */
-    public JsonParser getParser(File file) {
+    public static JsonParser getParser(File file) {
         try {
             return new JsonParser(new FileReader(file));
         } catch (FileNotFoundException e) {
@@ -241,7 +241,7 @@ public final class Json {
      * @param input The input stream for the parser to parse
      * @return A JsonParser over the given input stream
      */
-    public JsonParser getParser(InputStream input) {
+    public static JsonParser getParser(InputStream input) {
         return new JsonParser(new InputStreamReader(input));
     }
 
@@ -251,7 +251,7 @@ public final class Json {
      * @param reader The reader for the parser to parse
      * @return A JsonParser over the given string
      */
-    public JsonParser getParser(Reader reader) {
+    public static JsonParser getParser(Reader reader) {
         return new JsonParser(reader);
     }
 
