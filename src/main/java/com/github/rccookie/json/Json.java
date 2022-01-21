@@ -91,6 +91,7 @@ public final class Json {
      * @return The json string representing the object
      */
     public static String toString(Object object, boolean formatted) {
+        if(object instanceof JsonElement) object = ((JsonElement) object).get();
         return stringFor(new StringBuilder(), object, Collections.newSetFromMap(new IdentityHashMap<>()), formatted, 0).toString();
     }
 
@@ -123,6 +124,7 @@ public final class Json {
      * @return The object as an escaped json string value
      */
     public static String escape(Object object, boolean formatted) {
+        if(object instanceof JsonElement) object = ((JsonElement) object).get();
         if(object == null) return "\"null\"";
         if(!(object instanceof List<?> || object instanceof Map<?,?> || object instanceof Number || object instanceof Boolean || object.getClass().isArray())) // Don't escape strings twice
             return stringFor(new StringBuilder(), object.toString()).toString();
