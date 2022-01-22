@@ -4,6 +4,7 @@ import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
@@ -44,6 +45,21 @@ enum EmptyJsonElement implements JsonElement {
     @Override
     public Stream<JsonElement> stream() {
         return Stream.empty();
+    }
+
+    @Override
+    public void forEach(BiConsumer<? super String, ? super JsonElement> action) {
+        // No action
+    }
+
+    @Override
+    public Object toJson() {
+        throw new NoSuchElementException();
+    }
+
+    @Override
+    public <T> T as(Class<T> type) {
+        throw new NoSuchElementException("No data to deserialize present");
     }
 
     @Override

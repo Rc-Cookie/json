@@ -347,7 +347,7 @@ class JsonReader implements AutoCloseable {
      */
     boolean endOfValue() {
         char c = peek();
-        return c == '\n' || c == ' ' || c == ',' || c == ']' || c == '}' || c == '/'; // '/' -> Comment
+        return c == '\r' || c == '\n' || c == ' ' || c == ',' || c == ']' || c == '}' || c == '/'; // '/' -> Comment
     }
 
 

@@ -6,15 +6,17 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.Reader;
 import java.io.StringReader;
+import java.io.StringWriter;
 import java.io.UncheckedIOException;
+import java.io.Writer;
 import java.lang.reflect.Array;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.Collections;
-import java.util.IdentityHashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -91,8 +93,9 @@ public final class Json {
      * @return The json string representing the object
      */
     public static String toString(Object object, boolean formatted) {
-        if(object instanceof JsonElement) object = ((JsonElement) object).get();
-        return stringFor(new StringBuilder(), object, Collections.newSetFromMap(new IdentityHashMap<>()), formatted, 0).toString();
+        StringWriter writer = new StringWriter();
+        write(object, writer, formatted);
+        return writer.toString();
     }
 
     /**
@@ -124,11 +127,13 @@ public final class Json {
      * @return The object as an escaped json string value
      */
     public static String escape(Object object, boolean formatted) {
-        if(object instanceof JsonElement) object = ((JsonElement) object).get();
+        object = extractJson(object);
         if(object == null) return "\"null\"";
+        StringWriter writer = new StringWriter();
         if(!(object instanceof List<?> || object instanceof Map<?,?> || object instanceof Number || object instanceof Boolean || object.getClass().isArray())) // Don't escape strings twice
-            return stringFor(new StringBuilder(), object.toString()).toString();
-        return stringFor(new StringBuilder(), toString(object, formatted)).toString();
+            printStringFor(new PrintWriter(writer), object.toString());
+        else printStringFor(new PrintWriter(writer), toString(object, formatted));
+        return writer.toString();
     }
 
 
@@ -258,7 +263,7 @@ public final class Json {
     }
 
 
-    // ---------- Storing ----------
+    // ---------- Writing ----------
 
 
     /**
@@ -272,11 +277,71 @@ public final class Json {
      * @see #toString(Object)
      */
     public static void store(Object value, File file) {
+        store(value, file, DEFAULT_FORMATTED);
+    }
+
+    /**
+     * Converts the given value into a json string and stores it
+     * in the specified file. If the file exists it will be cleared before,
+     * otherwise a new file will be created.
+     *
+     * @param value The json element to store
+     * @param file The file to store the structure in
+     * @param formatted Whether the output should be formatted with
+     *                  newlines and indents
+     * @throws UncheckedIOException If an {@link IOException} occurres
+     * @see #toString(Object)
+     */
+    public static void store(Object value, File file, boolean formatted) {
         try(PrintWriter p = new PrintWriter(file)) {
-            p.println(toString(value));
+            write(value, p);
         } catch(IOException e) {
             throw new UncheckedIOException(e);
         }
+    }
+
+    /**
+     * Writes the given value as json into the given output stream.
+     *
+     * @param value The value to write
+     * @param out The stream to write into
+     */
+    public static void write(Object value, OutputStream out) {
+        write(value, out, DEFAULT_FORMATTED);
+    }
+
+    /**
+     * Writes the given value as json into the given output stream.
+     *
+     * @param value The value to write
+     * @param out The stream to write into
+     * @param formatted Whether the output should be formatted with
+     *                  newlines and indents
+     */
+    public static void write(Object value, OutputStream out, boolean formatted) {
+        write(value, new PrintWriter(out), formatted);
+    }
+
+    /**
+     * Writes the given value as json into the given writer.
+     *
+     * @param value The value to write
+     * @param writer The writer to write into
+     */
+    public static void write(Object value, Writer writer) {
+        write(value, writer, DEFAULT_FORMATTED);
+    }
+
+    /**
+     * Writes the given value as json into the given writer.
+     *
+     * @param value The value to write
+     * @param writer The writer to write into
+     * @param formatted Whether the output should be formatted with
+     *                  newlines and indents
+     */
+    public static void write(Object value, Writer writer, boolean formatted) {
+        printStringFor(writer instanceof PrintWriter ? ((PrintWriter) writer) : new PrintWriter(writer), extractJson(value), new HashSet<>(), formatted, 0);
     }
 
 
@@ -310,91 +375,89 @@ public final class Json {
 
     /**
      * Writes the json string representation of the given object into the specified
-     * {@link StringBuilder}.
+     * {@link PrintWriter}.
      *
-     * @param out The string builder to write into
+     * @param out The writer to write into
      * @param o The object to write as json string
      * @param blacklist Objects that would be nested
      * @param formatted Whether the string should be formatted
      * @param level The indent level, ignored if {@code formatted} is {@code false}
-     * @return {@code out}
      */
-    static StringBuilder stringFor(StringBuilder out, Object o, Set<Object> blacklist, boolean formatted, int level) {
-        if(o == null) return out.append("null");
-        if(o instanceof Map<?,?>) {
+    static void printStringFor(PrintWriter out, Object o, Set<Object> blacklist, boolean formatted, int level) {
+        if(o == null) out.print("null");
+        else if(o instanceof Map<?,?>) {
             Map<?,?> m = (Map<?,?>) o;
-            if(m.isEmpty()) return out.append("{}");
+            if(m.isEmpty()) out.print("{}");
 
-            out.append('{');
-            blacklist.add(m);
+            else {
+                out.print('{');
+                blacklist.add(m);
 
-            for (Map.Entry<?,?> member : m.entrySet()) {
-                if(blacklist.contains(member.getValue()))
-                    throw new NestedJsonException();
-                if(formatted) out.append('\n').append(INDENT.repeat(level + 1));
-                Json.stringFor(out, Objects.toString(Objects.requireNonNull(member.getKey(), "Json objects don't permit 'null' as key"))).append(':');
-                if(formatted) out.append(' ');
-                Json.stringFor(out, member.getValue(), blacklist, formatted, level + 1).append(',');
+                int i = m.size();
+                for (Map.Entry<?, ?> member : m.entrySet()) {
+                    if(blacklist.contains(member.getValue()))
+                        throw new NestedJsonException();
+                    if(formatted) {
+                        out.println();
+                        out.print(INDENT.repeat(level + 1));
+                    }
+                    Json.printStringFor(out, Objects.toString(Objects.requireNonNull(member.getKey(), "Json objects don't permit 'null' as key")));
+                    out.print(':');
+                    if(formatted) out.print(' ');
+                    Json.printStringFor(out, member.getValue(), blacklist, formatted, level + 1);
+                    if(--i != 0) out.print(',');
+                }
+
+                if(formatted) {
+                    out.println();
+                    out.print(INDENT.repeat(level));
+                }
+                out.print('}');
+
+                blacklist.remove(m); // Allow same instances 'next to each other'
             }
-
-            out.deleteCharAt(out.length() - 1);
-            if(formatted) out.append('\n').append(INDENT.repeat(level));
-
-            blacklist.remove(m); // Allow same instances 'next to each other'
-            return out.append('}');
         }
-        if(o instanceof List<?>) {
+        else if(o instanceof List<?>) {
             List<?> l = (List<?>) o;
-            if(l.isEmpty()) return out.append("[]");
+            if(l.isEmpty()) out.print("[]");
+            else {
 
-            blacklist.add(l);
-            out.append('[');
-            for(Object e : l) {
-                if(blacklist.contains(e))
-                    throw new NestedJsonException();
-                if(formatted) out.append('\n').append(INDENT.repeat(level + 1));
-                Json.stringFor(out, e, blacklist, formatted, level + 1).append(',');
+                blacklist.add(l);
+                out.print('[');
+
+                int i = l.size();
+                for (Object e : l) {
+                    if(blacklist.contains(e))
+                        throw new NestedJsonException();
+                    if(formatted) {
+                        out.println();
+                        out.print(INDENT.repeat(level + 1));
+                    }
+                    Json.printStringFor(out, e, blacklist, formatted, level + 1);
+                    if(--i != 0) out.print(',');
+                }
+
+                if(formatted) {
+                    out.println();
+                    out.print(INDENT.repeat(level));
+                }
+                out.print(']');
+
+                blacklist.remove(l); // Allow same instances 'next to each other'
             }
-
-            out.deleteCharAt(out.length() - 1);
-            if(formatted) out.append('\n').append(INDENT.repeat(level));
-
-            blacklist.remove(l); // Allow same instances 'next to each other'
-            return out.append(']');
         }
-        if(o.getClass().isArray()) {
-            int l = Array.getLength(o);
-            if(l == 0) return out.append("[]");
-
-            blacklist.add(o);
-            out.append('[');
-            for(int i=0; i<l; i++) {
-                Object e = Array.get(o, i);
-                if(blacklist.contains(e))
-                    throw new NestedJsonException();
-                if(formatted) out.append('\n').append(INDENT.repeat(level + 1));
-                Json.stringFor(out, e, blacklist, formatted, level + 1).append(',');
-            }
-
-            out.deleteCharAt(out.length() - 1);
-            if(formatted) out.append('\n').append(INDENT.repeat(level));
-
-            blacklist.remove(l); // Allow same instances 'next to each other'
-            return out.append(']');
-        }
-        if(o instanceof Number || o instanceof Boolean) return out.append(o);
-        return stringFor(out, o.toString());
+        else if(o instanceof Number || o instanceof Boolean) out.print(o);
+        else printStringFor(out, o.toString());
     }
 
     /**
-     * Writes the given string escaped into the specified {@link StringBuilder}.
+     * Writes the given string escaped into the specified {@link PrintWriter}.
      *
-     * @param out The string builder to write into
+     * @param out The writer to write into
      * @param s The string to write as json
-     * @return {@code out}
      */
-    static StringBuilder stringFor(StringBuilder out, String s) {
-        out.append('"');
+    static void printStringFor(PrintWriter out, String s) {
+        out.print('"');
         // Escape control characters
         s = s.replace("\\", "\\\\")
                 .replace("\t", "\\t")
@@ -406,13 +469,66 @@ public final class Json {
         // Escape characters that are not in the json charset
         for(int i=0; i<s.length(); i++) {
             char c = s.charAt(i);
-            if(CHARSET.canEncode(s.charAt(i))) out.append(c);
+            if(CHARSET.canEncode(s.charAt(i))) out.print(c);
             else {
                 String code = Integer.toHexString(c);
-                out.append("\\u").append("0".repeat(4 - code.length())).append(code);
+                out.print("\\u");
+                out.print("0".repeat(4 - code.length()));
+                out.print(code);
             }
         }
-        return out.append('"');
+        out.print('"');
+    }
+
+    /**
+     * Converts the given object to an appropriate json type.
+     *
+     * @param object The object to convert
+     * @return A json value representing the input
+     * @throws IllegalJsonTypeException If the type cannot be
+     *                                  converted to a json value
+     */
+    static Object extractJson(Object object) {
+        while(true) {
+            if(object instanceof JsonSerializable)
+                object = ((JsonSerializable) object).toJson();
+            else if(object != null && !(object instanceof JsonStructure)) {
+                if(object.getClass().isArray()) {
+                    JsonArray array = new JsonArray();
+                    int size = Array.getLength(object);
+                    for(int i=0; i<size; i++)
+                        array.add(Array.get(object, i));
+                    return array; // Definitely valid
+                }
+                else if(object instanceof List)
+                    return new JsonArray((List<?>) object);
+                else if(object instanceof Map)
+                    return new JsonObject((Map<?,?>) object);
+                else break;
+            }
+            else break;
+        }
+        return validateJsonType(object);
+    }
+
+    /**
+     * Validates that the given object is of a valid json type.
+     *
+     * @param o The object to check
+     * @return The input
+     * @throws IllegalJsonTypeException If the object is not of a valid
+     *                                  json type
+     */
+    static Object validateJsonType(Object o) throws IllegalJsonTypeException {
+        if(!(
+            o == null ||
+            o instanceof Number ||
+            o instanceof String ||
+            o instanceof Boolean ||
+            o instanceof JsonStructure ||
+            o instanceof JsonSerializable
+        )) throw new IllegalJsonTypeException(o);
+        return o;
     }
 
     /**
@@ -422,7 +538,6 @@ public final class Json {
      * @return The path, numbers are not parsed
      */
     static Object[] parsePath(String path) {
-        if(path.startsWith("[")) path = path.substring(1);
-        return path.replace("]", "").split("[\\[.]");
+        return (path.startsWith("[") ? path.substring(1) : path).replace("]", "").split("[\\[.]");
     }
 }

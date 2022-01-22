@@ -3,6 +3,7 @@ package com.github.rccookie.json;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
@@ -12,7 +13,7 @@ import java.util.stream.Stream;
  * data that may exist, but does not have to, and in that case would
  * get replaced by a default value.
  */
-public interface JsonElement extends Iterable<JsonElement> {
+public interface JsonElement extends Iterable<JsonElement>, JsonSerializable {
 
     /**
      * Singleton constant for an empty json element.
@@ -26,6 +27,16 @@ public interface JsonElement extends Iterable<JsonElement> {
      * @throws NoSuchElementException If no value is present
      */
     <T> T get();
+
+    /**
+     * Returns the elements value as an instance of the given
+     * type using the deserializer registered in
+     * {@link JsonDeserialization}.
+     *
+     * @param type The type to deserialize the value to
+     * @return The value returned by the deserializer
+     */
+    <T> T as(Class<T> type);
 
     /**
      * Returns the elements value as {@link JsonStructure}.
@@ -435,6 +446,15 @@ public interface JsonElement extends Iterable<JsonElement> {
     @Override
     String toString();
 
+    /**
+     * Iterates over the elements of this json object. If no value
+     * or {@code null} is present, no elements will be iterated.
+     *
+     * @param action The action to perform on each key-value-pair
+     * @throws ClassCastException If a non-null value is present, but
+     *                            it is not a json object
+     */
+    void forEach(BiConsumer<? super String, ? super JsonElement> action);
 
     /**
      * Returns the specified object wrapped in a json element,

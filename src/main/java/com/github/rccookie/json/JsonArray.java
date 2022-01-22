@@ -7,15 +7,17 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.List;
 
 import com.github.rccookie.util.IterableIterator;
 
+import static com.github.rccookie.json.Json.extractJson;
+
 /**
- * Represents an abstract json array. A json array can hold any
- * type of value, but everything that is not a number, a boolean
- * value or {@code null} will be converted to a string when generating
- * the json string, using {@link Object#toString()}.
- * <p>Json arrays implement {@link java.util.List}, so unlike actual
+ * Represents an abstract json array. A json object can hold any type of
+ * valid json value, everything that is not a number, a boolean value, a
+ * json structure or {@code null} has to implement {@link JsonSerializable}.
+ * <p>Json arrays implement {@link List}, so unlike actual
  * arrays they are not of a fixed size.
  */
 public class JsonArray extends ArrayList<Object> implements JsonStructure {
@@ -34,7 +36,7 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
      * @param copy The collection to copy
      */
     public JsonArray(Collection<?> copy) {
-        super(copy);
+        addAll(copy);
     }
 
     /**
@@ -52,7 +54,7 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
     /**
      * Creates a new json array by parsing the given json formatted
      * file. If the file only contains "null" or an
-     * {@link java.io.IOException IOException} occurres during parsing,
+     * {@link IOException IOException} occurres during parsing,
      * the json array will be empty. If the file is not formatted
      * properly in json syntax an {@link JsonParseException} will be
      * thrown.
@@ -64,6 +66,33 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
     }
 
 
+
+    @Override
+    public boolean add(Object o) {
+        return super.add(extractJson(o));
+    }
+
+    @Override
+    public void add(int index, Object element) {
+        super.add(index, extractJson(element));
+    }
+
+    @Override
+    public Object set(int index, Object element) {
+        return super.set(index, extractJson(element));
+    }
+
+    @Override
+    public boolean addAll(Collection<?> c) {
+        for(Object o : c) add(o);
+        return !c.isEmpty();
+    }
+
+    @Override
+    public boolean addAll(int index, Collection<?> c) {
+        for(Object o : c) add(index++, o);
+        return !c.isEmpty();
+    }
 
     /**
      * Creates a shallow copy of this json array by creating a new
@@ -165,6 +194,28 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
         if(path.length == 0) return asElement();
         int index = path[0] instanceof Integer ? (int)path[0] : Integer.parseInt(path[0].toString());
         return getElement(index).getPath(Arrays.copyOfRange(path, 1, path.length));
+    }
+
+
+
+    public void combine(JsonArray other) {
+        for(int i=0; i<other.size(); i++) {
+            Object v = other.get(i);
+            if(i >= size()) add(v);
+            else if(v instanceof JsonObject) {
+                JsonObject current = getObject(i);
+                if(current == null) set(i, v);
+                else current.combine((JsonObject) v);
+            }
+            else if(v instanceof JsonArray) {
+                JsonArray current = getArray(i);
+                if(current == null) set(i, v);
+                else current.combine((JsonArray) v);
+            }
+            else if(v != null) set(i, v);
+            // Don't replace with null value, because it is either already null
+            // or will override a non-null value
+        }
     }
 
 

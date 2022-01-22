@@ -3,6 +3,7 @@ package com.github.rccookie.json;
 import java.util.Iterator;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
@@ -15,7 +16,7 @@ class FullJsonElement implements JsonElement {
     final Object value;
 
     FullJsonElement(Object value) {
-        this.value = value;
+        this.value = Json.extractJson(value);
     }
 
     @Override
@@ -26,6 +27,23 @@ class FullJsonElement implements JsonElement {
     @Override
     public Iterator<JsonElement> iterator() {
         return value == null ? EmptyJsonElement.EMPTY_ITERATOR : asArray().elements();
+    }
+
+    @Override
+    public void forEach(BiConsumer<? super String, ? super JsonElement> action) {
+        JsonObject object = get();
+        if(object != null)
+            object.forEach((t, u) -> action.accept(t, JsonElement.wrapNullable(u)));
+    }
+
+    @Override
+    public Object toJson() {
+        return value;
+    }
+
+    @Override
+    public <T> T as(Class<T> type) {
+        return JsonDeserialization.deserialize(type, this);
     }
 
     @Override

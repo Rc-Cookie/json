@@ -10,12 +10,13 @@ import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
+import static com.github.rccookie.json.Json.extractJson;
+
 /**
- * Represents an abstract json object. A json object can hold any
- * type of value, but everything that is not a number, a boolean
- * value or {@code null} will be converted to a string when generating
- * the json string, using {@link Object#toString()}. Like json objects
- * this map does not allow the {@code null} key.
+ * Represents an abstract json object. A json object can hold any type of
+ * valid json value, everything that is not a number, a boolean value, a
+ * json structure or {@code null} has to implement {@link JsonSerializable}.
+ * Like json objects this map does not allow the {@code null} key.
  */
 public class JsonObject extends HashMap<String, Object> implements JsonStructure {
 
@@ -113,37 +114,32 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
 
     @Override
     public Object put(String key, Object value) {
-        return super.put(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), value);
+        return super.put(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), extractJson(value));
     }
 
     @Override
     public void putAll(Map<? extends String, ?> m) {
-        super.putAll(checkNoNullKeys(m));
+        m.forEach(this::put);
     }
 
     @Override
     public Object putIfAbsent(String key, Object value) {
-        return super.putIfAbsent(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), value);
+        return super.putIfAbsent(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), extractJson(value));
     }
 
     @Override
     public Object compute(String key, BiFunction<? super String, ? super Object, ?> remappingFunction) {
-        return super.compute(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), remappingFunction);
+        return super.compute(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), (k,v) -> extractJson(remappingFunction.apply(k,v)));
     }
 
     @Override
     public Object computeIfAbsent(String key, Function<? super String, ?> mappingFunction) {
-        return super.computeIfAbsent(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), mappingFunction);
+        return super.computeIfAbsent(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), k -> extractJson(mappingFunction.apply(k)));
     }
 
     @Override
     public Object computeIfPresent(String key, BiFunction<? super String, ? super Object, ?> remappingFunction) {
-        return super.computeIfPresent(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), remappingFunction);
-    }
-
-    private static Map<? extends String, ?> checkNoNullKeys(Map<? extends String, ?> m) {
-        m.forEach((k,$) -> Objects.requireNonNull(k));
-        return m;
+        return super.computeIfPresent(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), (k,v) -> extractJson(remappingFunction.apply(k,v)));
     }
 
     /**
@@ -180,6 +176,25 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
     public JsonElement getPath(Object... path) {
         if(path.length == 0) return asElement();
         return getElement(path[0].toString()).getPath(Arrays.copyOfRange(path, 1, path.length));
+    }
+
+
+
+    public void combine(JsonObject other) {
+        other.forEach((k,v) -> {
+            if(v == null) putIfAbsent(k, null);
+            else if(v instanceof JsonObject) {
+                JsonObject current = getObject(k);
+                if(current == null) put(k, v);
+                else current.combine((JsonObject) v);
+            }
+            else if(v instanceof JsonArray) {
+                JsonArray current = getArray(k);
+                if(current == null) put(k, v);
+                else current.combine((JsonArray) v);
+            }
+            else put(k, v);
+        });
     }
 
 
