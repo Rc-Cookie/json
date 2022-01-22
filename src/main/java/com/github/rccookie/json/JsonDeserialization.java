@@ -1,5 +1,6 @@
 package com.github.rccookie.json;
 
+import java.lang.reflect.Array;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -24,18 +25,27 @@ public final class JsonDeserialization {
     private static final Map<Class<?>, Function<JsonElement,?>> DESERIALIZERS = new HashMap<>();
     static {
         register(Boolean.class,       JsonElement::asBool);
+        register(boolean.class,       JsonElement::asBool);
         register(Number.class,        JsonElement::asNumber);
-        register(Byte.class, j -> j.asNumber().byteValue());
-        register(Short.class, j -> j.asNumber().shortValue());
+        register(Byte.class,          j -> j.asNumber().byteValue());
+        register(byte.class,          j -> j.asNumber().byteValue());
+        register(Short.class,         j -> j.asNumber().shortValue());
+        register(short.class,         j -> j.asNumber().shortValue());
         register(Integer.class,       JsonElement::asInt);
+        register(int.class,           JsonElement::asInt);
         register(Long.class,          JsonElement::asLong);
+        register(long.class,          JsonElement::asLong);
         register(Float.class,         JsonElement::asFloat);
+        register(float.class,         JsonElement::asFloat);
         register(Double.class,        JsonElement::asDouble);
+        register(double.class,        JsonElement::asDouble);
         register(String.class,        JsonElement::asString);
         register(JsonStructure.class, JsonElement::asStructure);
         register(JsonObject.class,    JsonElement::asObject);
         register(JsonArray.class,     JsonElement::asArray);
-        register(JsonElement.class, j -> j);
+        register(JsonElement.class,   j -> j);
+        register(Character.class,     j -> j.asString().charAt(0));
+        register(char.class,          j -> j.asString().charAt(0));
     }
 
     /**
@@ -104,6 +114,15 @@ public final class JsonDeserialization {
     public static <T> T deserialize(Class<T> type, JsonElement data) {
         if(Objects.requireNonNull(data).isEmpty())
             throw new NoSuchElementException("No data to deserialize present");
+        if(type.isArray()) {
+            int length = data.size();
+            Class<?> componentType = type.getComponentType();
+            @SuppressWarnings("unchecked")
+            T array = (T) Array.newInstance(componentType, length);
+            for(int i=0; i<length; i++)
+                Array.set(array, i, deserialize(componentType, data.get(i)));
+            return array;
+        }
         Function<JsonElement,T> deserializer = getDeserializer(type);
         if(deserializer == null)
             throw new IllegalStateException("No deserializer for type " + type + " registered");
@@ -119,7 +138,7 @@ public final class JsonDeserialization {
      */
     private static void initType(Class<?> type) {
         try { Class.forName(type.getName(), true, type.getClassLoader()); }
-        catch(ClassNotFoundException e) { throw new AssertionError(); }
+        catch(ClassNotFoundException ignored) { } // thrown on primitive array types
     }
 
     /**
