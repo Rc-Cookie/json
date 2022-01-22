@@ -488,7 +488,7 @@ public final class Json {
      * @throws IllegalJsonTypeException If the type cannot be
      *                                  converted to a json value
      */
-    static Object extractJson(Object object) {
+    public static Object extractJson(Object object) {
         while(true) {
             if(object instanceof JsonSerializable)
                 object = ((JsonSerializable) object).toJson();
