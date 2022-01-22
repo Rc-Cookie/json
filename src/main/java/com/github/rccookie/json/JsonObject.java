@@ -61,6 +61,24 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
         load(file);
     }
 
+    /**
+     * Creates a new json object from the given key-value pairs. There
+     * must be exactly as many keys as values, and all keys have to be
+     * strings. This method exists for convenient initialization of
+     * json objects.
+     *
+     * @param keyValuePairs The keys and values, alternating
+     * @throws IllegalArgumentException If there aren't as many keys as
+     *                                  values
+     * @throws ClassCastException If a key is not a string
+     */
+    public JsonObject(Object... keyValuePairs) {
+        if(keyValuePairs.length % 2 != 0)
+            throw new IllegalArgumentException("There must be exactly as many keys as values");
+        for(int i=0; i<keyValuePairs.length; i+=2)
+            put((String) keyValuePairs[i], keyValuePairs[i+1]);
+    }
+
 
 
     /**

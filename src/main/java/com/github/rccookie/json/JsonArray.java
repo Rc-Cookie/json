@@ -65,6 +65,15 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
         load(file);
     }
 
+    /**
+     * Creates a new json array with the given values.
+     *
+     * @param values The values for the json array
+     */
+    public JsonArray(Object... values) {
+        this.addAll(Arrays.asList(values));
+    }
+
 
 
     @Override
