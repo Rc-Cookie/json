@@ -23,19 +23,19 @@ public final class JsonDeserialization {
      */
     private static final Map<Class<?>, Function<JsonElement,?>> DESERIALIZERS = new HashMap<>();
     static {
-        registerDeserializer(Boolean.class,       JsonElement::asBool);
-        registerDeserializer(Number.class,        JsonElement::asNumber);
-        registerDeserializer(Byte.class,          j -> j.asNumber().byteValue());
-        registerDeserializer(Short.class,         j -> j.asNumber().shortValue());
-        registerDeserializer(Integer.class,       JsonElement::asInt);
-        registerDeserializer(Long.class,          JsonElement::asLong);
-        registerDeserializer(Float.class,         JsonElement::asFloat);
-        registerDeserializer(Double.class,        JsonElement::asDouble);
-        registerDeserializer(String.class,        JsonElement::asString);
-        registerDeserializer(JsonStructure.class, JsonElement::asStructure);
-        registerDeserializer(JsonObject.class,    JsonElement::asObject);
-        registerDeserializer(JsonArray.class,     JsonElement::asArray);
-        registerDeserializer(JsonElement.class,   j -> j);
+        register(Boolean.class,       JsonElement::asBool);
+        register(Number.class,        JsonElement::asNumber);
+        register(Byte.class, j -> j.asNumber().byteValue());
+        register(Short.class, j -> j.asNumber().shortValue());
+        register(Integer.class,       JsonElement::asInt);
+        register(Long.class,          JsonElement::asLong);
+        register(Float.class,         JsonElement::asFloat);
+        register(Double.class,        JsonElement::asDouble);
+        register(String.class,        JsonElement::asString);
+        register(JsonStructure.class, JsonElement::asStructure);
+        register(JsonObject.class,    JsonElement::asObject);
+        register(JsonArray.class,     JsonElement::asArray);
+        register(JsonElement.class, j -> j);
     }
 
     /**
@@ -50,7 +50,7 @@ public final class JsonDeserialization {
      * @param type The type the deserializer deserializes to
      * @param deserializer The json deserializer
      */
-    public static <T> void registerDeserializer(Class<T> type, Function<JsonElement, T> deserializer) {
+    public static <T> void register(Class<T> type, Function<JsonElement, T> deserializer) {
         DESERIALIZERS.put(checkType(Objects.requireNonNull(type)), Objects.requireNonNull(deserializer));
     }
 
@@ -60,7 +60,7 @@ public final class JsonDeserialization {
      * @param type The type to remove the deserializer for
      * @return Whether a deserializer was present previously
      */
-    public static boolean unregisterDeserializer(Class<?> type) {
+    public static boolean unregister(Class<?> type) {
         return DESERIALIZERS.remove(checkType(Objects.requireNonNull(type))) != null;
     }
 
