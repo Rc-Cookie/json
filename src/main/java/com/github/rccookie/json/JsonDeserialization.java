@@ -93,18 +93,6 @@ public final class JsonDeserialization {
     }
 
     /**
-     * Force initializes the specified type to ensure it had time to
-     * register itself for deserialization. If the type is already initialized
-     * this will do nothing.
-     *
-     * @param type The type to initialize
-     */
-    private static void initType(Class<?> type) {
-        try { Class.forName(type.getName(), true, type.getClassLoader()); }
-        catch(ClassNotFoundException ignored) { } // thrown on primitive array types
-    }
-
-    /**
      * Ensures that the deserializer of the given type is allowed to be
      * modified.
      *
