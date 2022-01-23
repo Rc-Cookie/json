@@ -341,7 +341,10 @@ public final class Json {
      *                  newlines and indents
      */
     public static void write(Object value, Writer writer, boolean formatted) {
-        printStringFor(writer instanceof PrintWriter ? ((PrintWriter) writer) : new PrintWriter(writer), extractJson(value), new HashSet<>(), formatted, 0);
+        PrintWriter printWriter = writer instanceof PrintWriter ? (PrintWriter) writer : new PrintWriter(writer);
+        printStringFor(printWriter, extractJson(value), new HashSet<>(), formatted, 0);
+        printWriter.println();
+        printWriter.flush();
     }
 
 

@@ -1,6 +1,7 @@
 package com.github.rccookie.json;
 
 import java.lang.reflect.Array;
+import java.lang.reflect.Constructor;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -55,7 +56,7 @@ public final class JsonDeserialization {
 
 
     /**
-     * Registers the given deserializer for the specified type.
+     * Registers a custom deserializer for the specified type.
      *
      * @param type The type the deserializer deserializes to
      * @param deserializer The json deserializer
@@ -65,44 +66,9 @@ public final class JsonDeserialization {
     }
 
     /**
-     * Unregisters the deserializer for the specified type
-     *
-     * @param type The type to remove the deserializer for
-     * @return Whether a deserializer was present previously
-     */
-    public static boolean unregister(Class<?> type) {
-        return DESERIALIZERS.remove(checkType(Objects.requireNonNull(type))) != null;
-    }
-
-    /**
-     * Returns whether the given type has a deserializer registered.
-     * <p>This will force initialize the specified type.
-     *
-     * @param type The type to check for
-     * @return Whether the type has a deserializer registered
-     */
-    public static boolean isRegistered(Class<?> type) {
-        initType(type);
-        return DESERIALIZERS.containsKey(type);
-    }
-
-    /**
-     * Returns the deserializer mapped for the specified type, or
-     * {@code null} if no deserializer is mapped.
-     * <p>This will force initialize the specified type.
-     *
-     * @param type The type to get the deserializer for
-     * @return The deserializer for the type, or {@code null}
-     */
-    @SuppressWarnings("unchecked")
-    public static <T> Function<JsonElement, T> getDeserializer(Class<T> type) {
-        initType(type);
-        return (Function<JsonElement, T>) DESERIALIZERS.get(Objects.requireNonNull(type));
-    }
-
-    /**
      * Deserializes the given json data into the given type using
-     * the mapped deserializer.
+     * the mapped deserializer or the constructor of the type with
+     * one argument of type {@link JsonElement}.
      *
      * @param type The type to deserialize to
      * @param data The data to deserialize
@@ -123,10 +89,7 @@ public final class JsonDeserialization {
                 Array.set(array, i, deserialize(componentType, data.get(i)));
             return array;
         }
-        Function<JsonElement,T> deserializer = getDeserializer(type);
-        if(deserializer == null)
-            throw new IllegalStateException("No deserializer for type " + type + " registered");
-        return deserializer.apply(data);
+        return getDeserializer(type).apply(data);
     }
 
     /**
@@ -155,5 +118,24 @@ public final class JsonDeserialization {
         if(FIXED_TYPES != null && FIXED_TYPES.contains(type))
             throw new IllegalArgumentException("The deserializer for " + type + " cannot be changed");
         return type;
+    }
+
+    private static <T> Function<JsonElement,T> getDeserializer(Class<T> type) {
+        @SuppressWarnings("unchecked")
+        Function<JsonElement,T> deserializer = (Function<JsonElement, T>) DESERIALIZERS.get(Objects.requireNonNull(type));
+        if(deserializer != null) return deserializer;
+        try {
+            Constructor<T> ctor = type.getDeclaredConstructor(JsonElement.class);
+            ctor.setAccessible(true);
+            deserializer = j -> {
+                try { return ctor.newInstance(j); }
+                catch(Exception e) { throw new RuntimeException("Exception invoking deserialization constructor", e); }
+            };
+            DESERIALIZERS.put(type, deserializer);
+            return deserializer;
+        } catch (NoSuchMethodException e) {
+            throw new IllegalArgumentException("The type " + type + " is not registered for deserialization and " +
+                    "does not declare a constructor " + type.getSimpleName() + "(JsonElement)");
+        }
     }
 }
