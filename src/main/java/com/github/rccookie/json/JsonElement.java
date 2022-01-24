@@ -247,6 +247,15 @@ public interface JsonElement extends Iterable<JsonElement>, JsonSerializable {
 
     /**
      * Returns this element if a non-null value is present, or a json element
+     * with the given non-null value.
+     *
+     * @param ifNotPresent The value to use if no non-null value is present
+     * @return A json element with a non-null value
+     */
+    <T> T or(Class<T> type, T ifNotPresent);
+
+    /**
+     * Returns this element if a non-null value is present, or a json element
      * with the supplied non-null value.
      *
      * @param getIfNotPresent Supplier for the value to use if no non-null value
@@ -254,6 +263,16 @@ public interface JsonElement extends Iterable<JsonElement>, JsonSerializable {
      * @return A json element with a non-null value
      */
     <T> T orGet(Supplier<T> getIfNotPresent);
+
+    /**
+     * Returns this element if a non-null value is present, or a json element
+     * with the supplied non-null value.
+     *
+     * @param getIfNotPresent Supplier for the value to use if no non-null value
+     *                        is present
+     * @return A json element with a non-null value
+     */
+    <T> T orGet(Class<T> type, Supplier<T> getIfNotPresent);
 
     /**
      * Returns this element if a non-null value is present, or the specified
@@ -265,6 +284,15 @@ public interface JsonElement extends Iterable<JsonElement>, JsonSerializable {
     <T> T orElse(JsonElement useIfNotPresent);
 
     /**
+     * Returns this element if a non-null value is present, or the specified
+     * json element if this one is empty.
+     *
+     * @param useIfNotPresent The element to use if no non-null value is present
+     * @return This or the given json element
+     */
+    <T> T orElse(Class<T> type, JsonElement useIfNotPresent);
+
+    /**
      * Returns this element if a non-null value is present, or gets the specified
      * json element if this one is empty.
      *
@@ -273,6 +301,16 @@ public interface JsonElement extends Iterable<JsonElement>, JsonSerializable {
      * @return This or the supplied json element
      */
     <T> T orElse(Supplier<JsonElement> useIfNotPresent);
+
+    /**
+     * Returns this element if a non-null value is present, or gets the specified
+     * json element if this one is empty.
+     *
+     * @param useIfNotPresent Supplier for element to use if no non-null value
+     *                        is present
+     * @return This or the supplied json element
+     */
+    <T> T orElse(Class<T> type, Supplier<JsonElement> useIfNotPresent);
 
 
     /**
@@ -286,6 +324,15 @@ public interface JsonElement extends Iterable<JsonElement>, JsonSerializable {
 
     /**
      * Returns this element if a value is present, or a json element with
+     * the specified value if no value is present.
+     *
+     * @param ifNotPresent The value to use if no value is present
+     * @return A json element with a value present
+     */
+    <T> T nullOr(Class<T> type, T ifNotPresent);
+
+    /**
+     * Returns this element if a value is present, or a json element with
      * the supplier value.
      *
      * @param getIfNotPresent The supplier for the value if no value is
@@ -295,6 +342,16 @@ public interface JsonElement extends Iterable<JsonElement>, JsonSerializable {
     <T> T nullOrGet(Supplier<T> getIfNotPresent);
 
     /**
+     * Returns this element if a value is present, or a json element with
+     * the supplier value.
+     *
+     * @param getIfNotPresent The supplier for the value if no value is
+     *                        present
+     * @return A json element with a value present
+     */
+    <T> T nullOrGet(Class<T> type, Supplier<T> getIfNotPresent);
+
+    /**
      * Returns this element if a value is present, or the specified json
      * element if this one is empty.
      *
@@ -302,6 +359,15 @@ public interface JsonElement extends Iterable<JsonElement>, JsonSerializable {
      * @return This or the given json element
      */
     <T> T nullOrElse(JsonElement useIfNotPresent);
+
+    /**
+     * Returns this element if a value is present, or the specified json
+     * element if this one is empty.
+     *
+     * @param useIfNotPresent The element to use if no value is present
+     * @return This or the given json element
+     */
+    <T> T nullOrElse(Class<T> type, JsonElement useIfNotPresent);
 
     /**
      * Returns this element if a value is present, or gets a json element
@@ -314,12 +380,30 @@ public interface JsonElement extends Iterable<JsonElement>, JsonSerializable {
     <T> T nullOrElse(Supplier<JsonElement> useIfNotPresent);
 
     /**
+     * Returns this element if a value is present, or gets a json element
+     * from the specified supplier if this one is empty.
+     *
+     * @param useIfNotPresent The json element supplier to use if no value
+     *                        is present
+     * @return This or the supplied json element
+     */
+    <T> T nullOrElse(Class<T> type, Supplier<JsonElement> useIfNotPresent);
+
+    /**
      * Returns this element if a value is present, or a json element with
      * the value {@code null} if this element is empty.
      *
      * @return A json element with a value present
      */
     <T> T orNull();
+
+    /**
+     * Returns this element if a value is present, or a json element with
+     * the value {@code null} if this element is empty.
+     *
+     * @return A json element with a value present
+     */
+    <T> T orNull(Class<T> type);
 
 
     /**

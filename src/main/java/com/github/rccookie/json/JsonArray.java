@@ -221,9 +221,7 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
                 if(current == null) set(i, v);
                 else current.combine((JsonArray) v);
             }
-            else if(v != null) set(i, v);
-            // Don't replace with null value, because it is either already null
-            // or will override a non-null value
+            else if(get(i) == null) set(i, v);
         }
     }
 

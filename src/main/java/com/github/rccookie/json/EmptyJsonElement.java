@@ -194,7 +194,17 @@ enum EmptyJsonElement implements JsonElement {
     }
 
     @Override
+    public <T> T or(Class<T> type, T ifNotPresent) {
+        return Objects.requireNonNull(ifNotPresent);
+    }
+
+    @Override
     public <T> T orGet(Supplier<T> getIfNotPresent) {
+        return Objects.requireNonNull(getIfNotPresent.get());
+    }
+
+    @Override
+    public <T> T orGet(Class<T> type, Supplier<T> getIfNotPresent) {
         return Objects.requireNonNull(getIfNotPresent.get());
     }
 
@@ -204,7 +214,17 @@ enum EmptyJsonElement implements JsonElement {
     }
 
     @Override
+    public <T> T orElse(Class<T> type, JsonElement useIfNotPresent) {
+        return Objects.requireNonNull(useIfNotPresent.get());
+    }
+
+    @Override
     public <T> T orElse(Supplier<JsonElement> useIfNotPresent) {
+        return Objects.requireNonNull(useIfNotPresent.get().get());
+    }
+
+    @Override
+    public <T> T orElse(Class<T> type, Supplier<JsonElement> useIfNotPresent) {
         return Objects.requireNonNull(useIfNotPresent.get().get());
     }
 
@@ -214,7 +234,17 @@ enum EmptyJsonElement implements JsonElement {
     }
 
     @Override
+    public <T> T nullOr(Class<T> type, T ifNotPresent) {
+        return ifNotPresent;
+    }
+
+    @Override
     public <T> T nullOrGet(Supplier<T> getIfNotPresent) {
+        return getIfNotPresent.get();
+    }
+
+    @Override
+    public <T> T nullOrGet(Class<T> type, Supplier<T> getIfNotPresent) {
         return getIfNotPresent.get();
     }
 
@@ -224,12 +254,27 @@ enum EmptyJsonElement implements JsonElement {
     }
 
     @Override
+    public <T> T nullOrElse(Class<T> type, JsonElement useIfNotPresent) {
+        return useIfNotPresent.get();
+    }
+
+    @Override
     public <T> T nullOrElse(Supplier<JsonElement> useIfNotPresent) {
         return useIfNotPresent.get().get();
     }
 
     @Override
+    public <T> T nullOrElse(Class<T> type, Supplier<JsonElement> useIfNotPresent) {
+        return useIfNotPresent.get().get();
+    }
+
+    @Override
     public <T> T orNull() {
+        return null;
+    }
+
+    @Override
+    public <T> T orNull(Class<T> type) {
         return null;
     }
 

@@ -2,6 +2,7 @@ package com.github.rccookie.json;
 
 import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -108,22 +109,86 @@ public final class JsonDeserialization {
         return type;
     }
 
+    @SuppressWarnings({"unchecked", "DuplicatedCode"})
     private static <T> Function<JsonElement,T> getDeserializer(Class<T> type) {
-        @SuppressWarnings("unchecked")
         Function<JsonElement,T> deserializer = (Function<JsonElement, T>) DESERIALIZERS.get(Objects.requireNonNull(type));
         if(deserializer != null) return deserializer;
-        try {
-            Constructor<T> ctor = type.getDeclaredConstructor(JsonElement.class);
-            ctor.setAccessible(true);
-            deserializer = j -> {
-                try { return ctor.newInstance(j); }
-                catch(Exception e) { throw new RuntimeException("Exception invoking deserialization constructor", e); }
-            };
-            DESERIALIZERS.put(type, deserializer);
-            return deserializer;
-        } catch (NoSuchMethodException e) {
-            throw new IllegalArgumentException("The type " + type + " is not registered for deserialization and " +
-                    "does not declare a constructor " + type.getSimpleName() + "(JsonElement)");
+
+        Constructor<T> ctor = (Constructor<T>) Arrays.stream(type.getDeclaredConstructors())
+                .peek(c -> c.setAccessible(true))
+                .filter(c -> c.isAnnotationPresent(JsonCtor.class))
+                .findAny()
+                .orElse(null);
+
+        if(ctor == null) {
+            try {
+                Constructor<T> altCtor = type.getDeclaredConstructor(JsonElement.class);
+                altCtor.setAccessible(true);
+                deserializer = j -> {
+                    try { return altCtor.newInstance(j); }
+                    catch(Exception e) { throw new RuntimeException(e); }
+                };
+                DESERIALIZERS.put(type, deserializer);
+                return deserializer;
+            } catch (NoSuchMethodException e) {
+                throw new IllegalArgumentException("The type " + type + " is not marked from json deserialization");
+            }
         }
+
+        JsonCtor props = ctor.getAnnotation(JsonCtor.class);
+        Class<?>[] paramTypes = ctor.getParameterTypes();
+        Type packaging = props.type();
+
+//            ctor.getParameters()[0].getName();
+
+        // Json object packaged
+        if(packaging == Type.OBJECT || (packaging == Type.AUTO && props.value().length != 0)) {
+            String[] keys = props.value();
+            if(keys.length != paramTypes.length)
+                throw new IllegalArgumentException("The annotated constructor of "+type+" has the wrong number of parameters");
+            deserializer = j -> {
+                Object[] params = new Object[keys.length];
+                for(int i=0; i<params.length; i++)
+                    params[i] = deserialize(paramTypes[i], j.get(keys[i]));
+                try { return ctor.newInstance(params); }
+                catch(Exception e) { throw new RuntimeException(e); }
+            };
+        }
+        // Json array packaged
+        else if(packaging == Type.ARRAY || (packaging == Type.AUTO && props.indices().length != 0)) {
+            int[] indices = props.indices();
+            if(indices.length == 0) {
+                // No indices specified -> use index of parameter
+                deserializer = j -> {
+                    Object[] params = new Object[paramTypes.length];
+                    for (int i = 0; i < params.length; i++)
+                        params[i] = deserialize(paramTypes[i], j.get(i));
+                    try { return ctor.newInstance(params); }
+                    catch (Exception e) { throw new RuntimeException(e); }
+                };
+            }
+            else {
+                if(indices.length != paramTypes.length)
+                    throw new IllegalArgumentException("The annotated constructor of " + type + " has the wrong number of parameters");
+                deserializer = j -> {
+                    Object[] params = new Object[indices.length];
+                    for (int i = 0; i < params.length; i++)
+                        params[i] = deserialize(paramTypes[i], j.get(indices[i]));
+                    try { return ctor.newInstance(params); }
+                    catch (Exception e) { throw new RuntimeException(e); }
+                };
+            }
+        }
+        // Not packaged
+        else {
+            if(paramTypes.length != 1)
+                throw new IllegalArgumentException("The annotated json of "+type+" constructor may have exactly one parameter");
+            deserializer = j -> {
+                try { return ctor.newInstance(deserialize(paramTypes[0], j)); }
+                catch(Exception e) { throw new RuntimeException(e); }
+            };
+        }
+        DESERIALIZERS.put(type, deserializer);
+        return deserializer;
     }
 }

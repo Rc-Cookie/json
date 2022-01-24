@@ -202,14 +202,28 @@ class FullJsonElement implements JsonElement {
     }
 
     @Override
+    public <T> T or(Class<T> type, T ifNotPresent) {
+        return value == null ? Objects.requireNonNull(ifNotPresent) : as(type);
+    }
+
+    @Override
     public <T> T orGet(Supplier<T> getIfNotPresent) {
         return value == null ? Objects.requireNonNull(getIfNotPresent.get()) : get();
     }
 
+    @Override
+    public <T> T orGet(Class<T> type, Supplier<T> getIfNotPresent) {
+        return value == null ? Objects.requireNonNull(getIfNotPresent.get()) : as(type);
+    }
 
     @Override
     public <T> T orElse(JsonElement useIfNotPresent) {
         return value == null ? Objects.requireNonNull(useIfNotPresent).get() : get();
+    }
+
+    @Override
+    public <T> T orElse(Class<T> type, JsonElement useIfNotPresent) {
+        return value == null ? Objects.requireNonNull(useIfNotPresent).get() : as(type);
     }
 
     @Override
@@ -218,8 +232,18 @@ class FullJsonElement implements JsonElement {
     }
 
     @Override
+    public <T> T orElse(Class<T> type, Supplier<JsonElement> useIfNotPresent) {
+        return value == null ? Objects.requireNonNull(useIfNotPresent.get()).get() : as(type);
+    }
+
+    @Override
     public <T> T nullOr(T ifNotPresent) {
         return get();
+    }
+
+    @Override
+    public <T> T nullOr(Class<T> type, T ifNotPresent) {
+        return as(type);
     }
 
     @Override
@@ -228,8 +252,18 @@ class FullJsonElement implements JsonElement {
     }
 
     @Override
+    public <T> T nullOrGet(Class<T> type, Supplier<T> getIfNotPresent) {
+        return as(type);
+    }
+
+    @Override
     public <T> T nullOrElse(JsonElement useIfNotPresent) {
         return get();
+    }
+
+    @Override
+    public <T> T nullOrElse(Class<T> type, JsonElement useIfNotPresent) {
+        return as(type);
     }
 
     @Override
@@ -238,8 +272,18 @@ class FullJsonElement implements JsonElement {
     }
 
     @Override
+    public <T> T nullOrElse(Class<T> type, Supplier<JsonElement> useIfNotPresent) {
+        return as(type);
+    }
+
+    @Override
     public <T> T orNull() {
         return get();
+    }
+
+    @Override
+    public <T> T orNull(Class<T> type) {
+        return as(type);
     }
 
     @Override

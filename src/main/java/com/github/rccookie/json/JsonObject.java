@@ -50,7 +50,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
     /**
      * Creates a new json object by parsing the given json formatted
      * file. If the file only contains "null" or an
-     * {@link java.io.IOException IOException} occurs during parsing,
+     * {@link IOException IOException} occurs during parsing,
      * the json object will be empty. If the file is not formatted
      * properly in json syntax an {@link JsonParseException} will be
      * thrown.
@@ -202,16 +202,16 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
         other.forEach((k,v) -> {
             if(v == null) putIfAbsent(k, null);
             else if(v instanceof JsonObject) {
-                JsonObject current = getObject(k);
+                JsonObject current = getElement(k).orNull();
                 if(current == null) put(k, v);
                 else current.combine((JsonObject) v);
             }
             else if(v instanceof JsonArray) {
-                JsonArray current = getArray(k);
+                JsonArray current = getElement(k).orNull();
                 if(current == null) put(k, v);
                 else current.combine((JsonArray) v);
             }
-            else put(k, v);
+            else if(!containsKey(k)) put(k, v);
         });
     }
 
