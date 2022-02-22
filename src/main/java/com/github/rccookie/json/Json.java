@@ -359,7 +359,7 @@ public final class Json {
      */
     public static void setIndent(int spaceCount) {
         if(spaceCount < 0) throw new IllegalArgumentException("Indent space count must be positive");
-        INDENT = " ".repeat(spaceCount);
+        INDENT = repeat(" ", spaceCount);
     }
 
     /**
@@ -402,7 +402,7 @@ public final class Json {
                         throw new NestedJsonException();
                     if(formatted) {
                         out.println();
-                        out.print(INDENT.repeat(level + 1));
+                        out.print(repeat(INDENT, level + 1));
                     }
                     Json.printStringFor(out, Objects.toString(Objects.requireNonNull(member.getKey(), "Json objects don't permit 'null' as key")));
                     out.print(':');
@@ -413,7 +413,7 @@ public final class Json {
 
                 if(formatted) {
                     out.println();
-                    out.print(INDENT.repeat(level));
+                    out.print(repeat(INDENT, level));
                 }
                 out.print('}');
 
@@ -434,7 +434,7 @@ public final class Json {
                         throw new NestedJsonException();
                     if(formatted) {
                         out.println();
-                        out.print(INDENT.repeat(level + 1));
+                        out.print(repeat(INDENT, level + 1));
                     }
                     Json.printStringFor(out, e, blacklist, formatted, level + 1);
                     if(--i != 0) out.print(',');
@@ -442,7 +442,7 @@ public final class Json {
 
                 if(formatted) {
                     out.println();
-                    out.print(INDENT.repeat(level));
+                    out.print(repeat(INDENT, level));
                 }
                 out.print(']');
 
@@ -476,7 +476,7 @@ public final class Json {
             else {
                 String code = Integer.toHexString(c);
                 out.print("\\u");
-                out.print("0".repeat(4 - code.length()));
+                out.print(repeat("0", 4 - code.length()));
                 out.print(code);
             }
         }
@@ -542,5 +542,13 @@ public final class Json {
      */
     static Object[] parsePath(String path) {
         return (path.startsWith("[") ? path.substring(1) : path).replace("]", "").split("[\\[.]");
+    }
+
+    static String repeat(String str, int times) {
+        StringBuilder out = new StringBuilder();
+        //noinspection StringRepeatCanBeUsed
+        for(int i=0; i<times; i++)
+            out.append(str);
+        return out.toString();
     }
 }
