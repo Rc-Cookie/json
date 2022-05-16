@@ -4,11 +4,15 @@ import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.Arrays;
-import java.util.HashMap;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+
+import org.jetbrains.annotations.NotNull;
 
 import static com.github.rccookie.json.Json.extractJson;
 
@@ -18,7 +22,12 @@ import static com.github.rccookie.json.Json.extractJson;
  * json structure or {@code null} has to implement {@link JsonSerializable}.
  * Like json objects this map does not allow the {@code null} key.
  */
-public class JsonObject extends HashMap<String, Object> implements JsonStructure {
+public class JsonObject implements Map<String, Object>, JsonStructure {
+
+    /**
+     * Contents of the json object.
+     */
+    private final Map<String, Object> data = new LinkedHashMap<>();
 
     /**
      * Creates a new, empty json object.
@@ -31,7 +40,7 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
      * @param copy The map describing the mappings to do.
      */
     public JsonObject(Map<?,?> copy) {
-        for(Entry<?,?> e : copy.entrySet())
+        for(Map.Entry<?,?> e : copy.entrySet())
             put(Objects.toString(Objects.requireNonNull(e.getKey(), "Json objects don't permit 'null' as key")), e.getValue());
     }
 
@@ -129,10 +138,39 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
     }
 
 
+    @Override
+    public int size() {
+        return data.size();
+    }
+
+    @Override
+    public boolean isEmpty() {
+        return data.isEmpty();
+    }
+
+    @Override
+    public boolean containsKey(Object key) {
+        return data.containsKey(key);
+    }
+
+    @Override
+    public boolean containsValue(Object value) {
+        return data.containsValue(value);
+    }
+
+    @Override
+    public Object get(Object key) {
+        return data.get(key);
+    }
 
     @Override
     public Object put(String key, Object value) {
-        return super.put(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), extractJson(value));
+        return data.put(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), extractJson(value));
+    }
+
+    @Override
+    public Object remove(Object key) {
+        return data.remove(key);
     }
 
     @Override
@@ -141,23 +179,46 @@ public class JsonObject extends HashMap<String, Object> implements JsonStructure
     }
 
     @Override
+    public void clear() {
+        data.clear();
+    }
+
+    @NotNull
+    @Override
+    public Set<String> keySet() {
+        return data.keySet();
+    }
+
+    @NotNull
+    @Override
+    public Collection<Object> values() {
+        return data.values();
+    }
+
+    @NotNull
+    @Override
+    public Set<Entry<String, Object>> entrySet() {
+        return data.entrySet();
+    }
+
+    @Override
     public Object putIfAbsent(String key, Object value) {
-        return super.putIfAbsent(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), extractJson(value));
+        return data.putIfAbsent(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), extractJson(value));
     }
 
     @Override
     public Object compute(String key, BiFunction<? super String, ? super Object, ?> remappingFunction) {
-        return super.compute(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), (k,v) -> extractJson(remappingFunction.apply(k,v)));
+        return data.compute(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), (k,v) -> extractJson(remappingFunction.apply(k,v)));
     }
 
     @Override
     public Object computeIfAbsent(String key, Function<? super String, ?> mappingFunction) {
-        return super.computeIfAbsent(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), k -> extractJson(mappingFunction.apply(k)));
+        return data.computeIfAbsent(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), k -> extractJson(mappingFunction.apply(k)));
     }
 
     @Override
     public Object computeIfPresent(String key, BiFunction<? super String, ? super Object, ?> remappingFunction) {
-        return super.computeIfPresent(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), (k,v) -> extractJson(remappingFunction.apply(k,v)));
+        return data.computeIfPresent(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), (k,v) -> extractJson(remappingFunction.apply(k,v)));
     }
 
     /**

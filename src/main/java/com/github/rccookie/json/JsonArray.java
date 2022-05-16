@@ -8,8 +8,11 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
+import java.util.ListIterator;
 
 import com.github.rccookie.util.IterableIterator;
+
+import org.jetbrains.annotations.NotNull;
 
 import static com.github.rccookie.json.Json.extractJson;
 
@@ -20,9 +23,12 @@ import static com.github.rccookie.json.Json.extractJson;
  * <p>Json arrays implement {@link List}, so unlike actual
  * arrays they are not of a fixed size.
  */
-public class JsonArray extends ArrayList<Object> implements JsonStructure {
+public class JsonArray implements List<Object>, JsonStructure {
 
-
+    /**
+     * The contents of the json array.
+     */
+    private final List<Object> data = new ArrayList<>();
 
     /**
      * Creates a new, empty json array.
@@ -75,20 +81,142 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
     }
 
 
+    @Override
+    public int size() {
+        return data.size();
+    }
+
+    @Override
+    public boolean isEmpty() {
+        return data.isEmpty();
+    }
+
+    @Override
+    public boolean contains(Object o) {
+        return data.contains(o);
+    }
+
+    @NotNull
+    @Override
+    public Iterator<Object> iterator() {
+        return data.iterator();
+    }
+
+    @NotNull
+    @Override
+    public Object[] toArray() {
+        return data.toArray();
+    }
+
+    @NotNull
+    @Override
+    public <T> T[] toArray(@NotNull T[] a) {
+        //noinspection SuspiciousToArrayCall
+        return data.toArray(a);
+    }
 
     @Override
     public boolean add(Object o) {
-        return super.add(extractJson(o));
+        return data.add(extractJson(o));
+    }
+
+    @Override
+    public boolean remove(Object o) {
+        return data.remove(o);
+    }
+
+    @Override
+    public boolean containsAll(@NotNull Collection<?> c) {
+        return data.containsAll(c);
     }
 
     @Override
     public void add(int index, Object element) {
-        super.add(index, extractJson(element));
+        data.add(index, extractJson(element));
+    }
+
+    @Override
+    public Object remove(int index) {
+        return data.remove(index);
+    }
+
+    @Override
+    public int indexOf(Object o) {
+        return data.indexOf(o);
+    }
+
+    @Override
+    public int lastIndexOf(Object o) {
+        return data.lastIndexOf(o);
+    }
+
+    @NotNull
+    @Override
+    public ListIterator<Object> listIterator() {
+        return listIterator(0);
+    }
+
+    @NotNull
+    @Override
+    public ListIterator<Object> listIterator(int index) {
+        ListIterator<Object> it = data.listIterator(index);
+        return new ListIterator<>() {
+            @Override
+            public boolean hasNext() {
+                return it.hasNext();
+            }
+
+            @Override
+            public Object next() {
+                return it.next();
+            }
+
+            @Override
+            public boolean hasPrevious() {
+                return it.hasPrevious();
+            }
+
+            @Override
+            public Object previous() {
+                return it.previous();
+            }
+
+            @Override
+            public int nextIndex() {
+                return it.nextIndex();
+            }
+
+            @Override
+            public int previousIndex() {
+                return it.previousIndex();
+            }
+
+            @Override
+            public void remove() {
+                it.remove();
+            }
+
+            @Override
+            public void set(Object o) {
+                it.set(extractJson(o));
+            }
+
+            @Override
+            public void add(Object o) {
+                it.add(extractJson(o));
+            }
+        };
+    }
+
+    @NotNull
+    @Override
+    public List<Object> subList(int fromIndex, int toIndex) {
+        return data.subList(fromIndex, toIndex);
     }
 
     @Override
     public Object set(int index, Object element) {
-        return super.set(index, extractJson(element));
+        return data.set(index, extractJson(element));
     }
 
     @Override
@@ -101,6 +229,26 @@ public class JsonArray extends ArrayList<Object> implements JsonStructure {
     public boolean addAll(int index, Collection<?> c) {
         for(Object o : c) add(index++, o);
         return !c.isEmpty();
+    }
+
+    @Override
+    public boolean removeAll(@NotNull Collection<?> c) {
+        return data.removeAll(c);
+    }
+
+    @Override
+    public boolean retainAll(@NotNull Collection<?> c) {
+        return data.retainAll(c);
+    }
+
+    @Override
+    public void clear() {
+        data.clear();
+    }
+
+    @Override
+    public Object get(int index) {
+        return data.get(index);
     }
 
     /**
