@@ -507,6 +507,8 @@ public final class Json {
                     return new JsonArray((List<?>) object);
                 else if(object instanceof Map)
                     return new JsonObject((Map<?,?>) object);
+                else if(object instanceof Enum<?>)
+                    return object.toString();
                 else break;
             }
             else break;

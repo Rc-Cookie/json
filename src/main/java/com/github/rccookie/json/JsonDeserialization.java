@@ -104,15 +104,22 @@ public final class JsonDeserialization {
      */
     private static Class<?> checkType(Class<?> type) throws IllegalArgumentException {
         //noinspection ConstantConditions
-        if(FIXED_TYPES != null && FIXED_TYPES.contains(type))
+        if(FIXED_TYPES != null && FIXED_TYPES.contains(type) || type.isEnum())
             throw new IllegalArgumentException("The deserializer for " + type + " cannot be changed");
         return type;
     }
 
     @SuppressWarnings({"unchecked", "DuplicatedCode"})
-    private static <T> Function<JsonElement,T> getDeserializer(Class<T> type) {
-        Function<JsonElement,T> deserializer = (Function<JsonElement, T>) DESERIALIZERS.get(Objects.requireNonNull(type));
+    private static <T> Function<JsonElement, T> getDeserializer(Class<T> type) {
+        try {
+            Class.forName(type.getName(), true, type.getClassLoader());
+        } catch(ClassNotFoundException e) {
+            throw new AssertionError();
+        }
+        Function<JsonElement, T> deserializer = (Function<JsonElement, T>) DESERIALIZERS.get(Objects.requireNonNull(type));
         if(deserializer != null) return deserializer;
+        if(type.isEnum())
+            return json -> (T) getEnumInstance(type, json.asString());
 
         Constructor<T> ctor = (Constructor<T>) Arrays.stream(type.getDeclaredConstructors())
                 .peek(c -> c.setAccessible(true))
@@ -190,5 +197,10 @@ public final class JsonDeserialization {
         }
         DESERIALIZERS.put(type, deserializer);
         return deserializer;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <E extends Enum<E>> E getEnumInstance(Class<?> type, String name) {
+        return Enum.valueOf((Class<E>) type, name);
     }
 }
