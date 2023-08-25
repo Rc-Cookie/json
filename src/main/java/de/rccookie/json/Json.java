@@ -1,4 +1,4 @@
-package com.github.rccookie.json;
+package de.rccookie.json;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -13,14 +13,16 @@ import java.io.StringReader;
 import java.io.StringWriter;
 import java.io.UncheckedIOException;
 import java.io.Writer;
-import java.lang.reflect.Array;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * Utility class for parsing and writing json.
@@ -36,8 +38,8 @@ import java.util.Set;
  * <p><p><h2>Path syntax</h2>
  * <p>Paths describe the path to an element in a json structure.
  * They have two ways of describing the required element:
- * <li>{@code [<key or index>]}
- * <li>{@code .<key or index>}
+ * <li>{@code [&lt;key or index&gt;]}
+ * <li>{@code .&lt;key or index&gt;}
  * <p>It is recommended to use the brackets only for array indices and
  * the dot only for keys, but it is valid to do it any way. The first
  * dot must be omitted.
@@ -127,7 +129,7 @@ public final class Json {
      * @return The object as an escaped json string value
      */
     public static String escape(Object object, boolean formatted) {
-        object = extractJson(object);
+        object = serialize(object);
         if(object == null) return "\"null\"";
         StringWriter writer = new StringWriter();
         if(!(object instanceof List<?> || object instanceof Map<?,?> || object instanceof Number || object instanceof Boolean || object.getClass().isArray())) // Don't escape strings twice
@@ -188,6 +190,19 @@ public final class Json {
      *                              reading the file
      */
     public static JsonElement load(String file) throws JsonParseException {
+        return load(Path.of(file));
+    }
+
+    /**
+     * Parses the given json formatted file into a json element.
+     *
+     * @param file The file to parse from
+     * @return The parsed json element
+     * @throws JsonParseException If the string does not follow json syntax
+     * @throws UncheckedIOException If an {@link IOException} occurres while
+     *                              reading the file
+     */
+    public static JsonElement load(File file) throws JsonParseException {
         try {
             return parse(new FileReader(file));
         } catch(IOException e) {
@@ -204,9 +219,9 @@ public final class Json {
      * @throws UncheckedIOException If an {@link IOException} occurres while
      *                              reading the file
      */
-    public static JsonElement load(File file) throws JsonParseException {
+    public static JsonElement load(Path file) throws JsonParseException {
         try {
-            return parse(new FileReader(file));
+            return parse(Files.newInputStream(file));
         } catch(IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -238,6 +253,22 @@ public final class Json {
         try {
             return new JsonParser(new FileReader(file));
         } catch (FileNotFoundException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    /**
+     * Returns a {@link JsonParser} over the given file.
+     *
+     * @param file The file for the parser to parse
+     * @return A JsonParser over the given string
+     * @throws UncheckedIOException If an {@link IOException} occurres while
+     *                              opening the file
+     */
+    public static JsonParser getParser(Path file) {
+        try {
+            return new JsonParser(Files.newBufferedReader(file));
+        } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
     }
@@ -294,7 +325,42 @@ public final class Json {
      */
     public static void store(Object value, File file, boolean formatted) {
         try(PrintWriter p = new PrintWriter(file)) {
-            write(value, p);
+            write(value, p, formatted);
+        } catch(IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+
+    /**
+     * Converts the given value into a json string and stores it
+     * in the specified file. If the file exists it will be cleared before,
+     * otherwise a new file will be created.
+     *
+     * @param value The json element to store
+     * @param file The file to store the structure in
+     * @throws UncheckedIOException If an {@link IOException} occurres
+     * @see #toString(Object)
+     */
+    public static void store(Object value, Path file) {
+        store(value, file, DEFAULT_FORMATTED);
+    }
+
+    /**
+     * Converts the given value into a json string and stores it
+     * in the specified file. If the file exists it will be cleared before,
+     * otherwise a new file will be created.
+     *
+     * @param value The json element to store
+     * @param file The file to store the structure in
+     * @param formatted Whether the output should be formatted with
+     *                  newlines and indents
+     * @throws UncheckedIOException If an {@link IOException} occurres
+     * @see #toString(Object)
+     */
+    public static void store(Object value, Path file, boolean formatted) {
+        try(OutputStream p = Files.newOutputStream(file)) {
+            write(value, p, formatted);
         } catch(IOException e) {
             throw new UncheckedIOException(e);
         }
@@ -342,13 +408,12 @@ public final class Json {
      */
     public static void write(Object value, Writer writer, boolean formatted) {
         PrintWriter printWriter = writer instanceof PrintWriter ? (PrintWriter) writer : new PrintWriter(writer);
-        printStringFor(printWriter, extractJson(value), new HashSet<>(), formatted, 0);
-        printWriter.println();
+        printStringFor(printWriter, serialize(value), new HashSet<>(), formatted, 0);
         printWriter.flush();
     }
 
 
-    // ---------- Preferences ----------
+    // ---------- Configuration ----------
 
 
     /**
@@ -363,6 +428,15 @@ public final class Json {
     }
 
     /**
+     * Returns the indent size used when generating a formatted json string.
+     *
+     * @return The number of spaces used to create an indent
+     */
+    public static int getIntent() {
+        return INDENT.length();
+    }
+
+    /**
      * Sets weather generated json strings should be formatted if not
      * specified.
      *
@@ -370,6 +444,102 @@ public final class Json {
      */
     public static void setDefaultFormatted(boolean formatted) {
         DEFAULT_FORMATTED = formatted;
+    }
+
+    /**
+     * Returns whether generated json strings are currently formatted if not
+     * specified.
+     *
+     * @return Whether to format josn strings if not specified
+     */
+    public static boolean isDefaultFormatted() {
+        return DEFAULT_FORMATTED;
+    }
+
+    /**
+     * Registers an external json serializer for a specific class; a function that turns
+     * objects of a given type into a json structure. The function may return another object
+     * to be serialized recursively, however, make sure not to cause any "serialization loops".
+     * The serializer may be invoked with an instance of a subclass as well. This option is only
+     * intended to add serialization support for classes that cannot be modified, i.e. because
+     * they are part of a library.
+     * <p>Some standard java classes are added by default and cannot be overridden. Those
+     * serializers cannot be registered and already have a deserializer counterpart registered
+     * as well. The same is true for record classes (if the runtime java version supports them).</p>
+     * <p>You cannot register a serializer for the {@link Object} class. Furthermore, arrays and
+     * classes implementing {@link JsonSerializable} cannot be overridden (each of them already
+     * has a serializer defined). Enums are automatically serialized, but you may want to override
+     * their serializer in the unlikely case of a mutable enum instance. Serializers for interface
+     * types are supported, note however that collections and maps are automatically serialized
+     * (although specific properties of the implementation, like a sorting comparator or similar,
+     * will not be serialized. In that case an external serializer may be helpful if the class cannot
+     * implement JsonSerializable directly).</p>
+     *
+     * @param type The type to add a serializer for
+     * @param toJson The serialization function
+     */
+    public static <T> void registerExternalSerializer(Class<T> type, Function<? super T, ?> toJson) {
+        JsonSerialization.registerSerializer(type, toJson);
+    }
+
+    /**
+     * Registers a json deserializer for (and only for) the specified type. The function will be
+     * used to deserialize raw json data into the specified type when using the {@link JsonElement#as(Class)}
+     * functions.
+     * <p>Classes can also use annotations to specify deserialization, this method serves as an option
+     * to add deserialization to classes that cannot be edited, and to be able to avoid the need of
+     * reflection in case the target runtime does not support it.</p>
+     * <p>The deserializer for a class should, if possible, be registered when the specified class
+     * gets initialized, for example like this:</p>
+     * <pre>
+     * public class Foo {
+     *     static {
+     *         Json.registerDeserializer(Foo.class, json -> ...);
+     *     }
+     *     // Rest of class...
+     * }
+     * </pre>
+     * When the type gets deserialized, the class will be automatically initialized, if not already done,
+     * ensuring that the deserializer is registered in time.
+     * <p>Some standard java classes are added by default, and some of them cannot be overridden.
+     * Also, enums and records (if the runtime java version supports them) are deserialized automatically,
+     * although this behaviour can be overridden. Collection classes and Maps <b>cannot</b> be deserialized
+     * automatically, because this process does not work with generics (due to type erasure the generic
+     * types cannot be specified). However, there are special methods available in {@link JsonElement}
+     * (asList(), asMap(),...) to deserialize to these common types</p>
+     *
+     * @param type The type to be deserialized to by the deserializer
+     * @param fromJson The function deserializing json into the specified type
+     */
+    public static <T> void registerDeserializer(Class<T> type, Function<JsonElement, ? extends T> fromJson) {
+        JsonSerialization.registerDeserializer(type, fromJson);
+    }
+
+    /**
+     * Converts the given object to an appropriate raw json type.
+     *
+     * @param object The object to convert
+     * @return A json value representing the input
+     * @throws IllegalJsonTypeException If the type cannot be
+     *                                  converted to a json value
+     */
+    public static Object serialize(Object object) {
+        return JsonSerialization.serialize(object);
+    }
+
+    /**
+     * Deserialized the given json data into an object of the specified type. In general
+     * {@link JsonElement#as(Class)} should be preferred over using this method directly.
+     *
+     * @param type The type to deserialize to
+     * @param json The json data to deserialize, can be a json element, a raw json type
+     *             or data that first needs to be serialized to json
+     * @return The given json data deserialized as the specified type
+     * @throws IllegalJsonTypeException If the input is not valid json data
+     * @throws IllegalArgumentException If no deserializer is known to deserialize the specified type
+     */
+    public static <T> T deserialize(Class<T> type, Object json) {
+        return JsonElement.wrap(json).as(type);
     }
 
 
@@ -481,59 +651,6 @@ public final class Json {
             }
         }
         out.print('"');
-    }
-
-    /**
-     * Converts the given object to an appropriate json type.
-     *
-     * @param object The object to convert
-     * @return A json value representing the input
-     * @throws IllegalJsonTypeException If the type cannot be
-     *                                  converted to a json value
-     */
-    public static Object extractJson(Object object) {
-        while(true) {
-            if(object instanceof JsonSerializable)
-                object = ((JsonSerializable) object).toJson();
-            else if(object != null && !(object instanceof JsonStructure)) {
-                if(object.getClass().isArray()) {
-                    JsonArray array = new JsonArray();
-                    int size = Array.getLength(object);
-                    for(int i=0; i<size; i++)
-                        array.add(Array.get(object, i));
-                    return array; // Definitely valid
-                }
-                else if(object instanceof List)
-                    return new JsonArray((List<?>) object);
-                else if(object instanceof Map)
-                    return new JsonObject((Map<?,?>) object);
-                else if(object instanceof Enum<?>)
-                    return object.toString();
-                else break;
-            }
-            else break;
-        }
-        return validateJsonType(object);
-    }
-
-    /**
-     * Validates that the given object is of a valid json type.
-     *
-     * @param o The object to check
-     * @return The input
-     * @throws IllegalJsonTypeException If the object is not of a valid
-     *                                  json type
-     */
-    static Object validateJsonType(Object o) throws IllegalJsonTypeException {
-        if(!(
-            o == null ||
-            o instanceof Number ||
-            o instanceof String ||
-            o instanceof Boolean ||
-            o instanceof JsonStructure ||
-            o instanceof JsonSerializable
-        )) throw new IllegalJsonTypeException(o);
-        return o;
     }
 
     /**

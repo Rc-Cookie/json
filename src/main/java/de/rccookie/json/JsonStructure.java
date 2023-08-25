@@ -1,7 +1,9 @@
-package com.github.rccookie.json;
+package de.rccookie.json;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Path;
 
 /**
  * Superclass of {@link JsonObject} and {@link JsonArray}.
@@ -92,13 +94,77 @@ public interface JsonStructure extends Cloneable {
     boolean load(File file);
 
     /**
+     * Assigns the value of the given json formatted file to this structure.
+     * If an {@link IOException} occurres, the content of this json structure
+     * will only be cleared.
+     *
+     * @param file The file to load from
+     * @return Weather any assignment was done
+     * @throws JsonParseException If the file does not follow json syntax
+     * @throws NullPointerException If the file contains the content {@code null}
+     * @throws ClassCastException If the file is valid but does not represent
+     *                            the required type of json structure
+     */
+    boolean load(Path file);
+
+    /**
+     * Assigns the value of the given json formatted file to this structure.
+     * If an {@link IOException} occurres, the content of this json structure
+     * will only be cleared.
+     *
+     * @param file The file to load from
+     * @return Weather any assignment was done
+     * @throws JsonParseException If the file does not follow json syntax
+     * @throws NullPointerException If the file contains the content {@code null}
+     * @throws ClassCastException If the file is valid but does not represent
+     *                            the required type of json structure
+     */
+    default boolean load(String file) {
+        return load(Path.of(file));
+    }
+
+    /**
      * Stores this json structure in the given file. The file will be cleared
      * if it exists, otherwise a new file will be created.
      *
      * @param file The file to store the object in
      * @return Weather the storing was successful
      */
-    boolean store(File file);
+    default boolean store(File file) {
+        try {
+            Json.store(this, file);
+            return true;
+        } catch(UncheckedIOException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Stores this json structure in the given file. The file will be cleared
+     * if it exists, otherwise a new file will be created.
+     *
+     * @param file The file to store the object in
+     * @return Weather the storing was successful
+     */
+    default boolean store(Path file) {
+        try {
+            Json.store(this, file);
+            return true;
+        } catch(UncheckedIOException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Stores this json structure in the given file. The file will be cleared
+     * if it exists, otherwise a new file will be created.
+     *
+     * @param file The file to store the object in
+     * @return Weather the storing was successful
+     */
+    default boolean store(String file) {
+        return store(Path.of(file));
+    }
 
     /**
      * Converts this json array into a json string. Any values that are

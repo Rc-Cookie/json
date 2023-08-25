@@ -1,4 +1,4 @@
-package com.github.rccookie.json;
+package de.rccookie.json;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -346,6 +346,7 @@ class JsonReader implements AutoCloseable {
      * @throws JsonParseException If the end of the reader is reached
      */
     boolean endOfValue() {
+        if(isEmpty()) return true;
         char c = peek();
         return c == '\r' || c == '\n' || c == ' ' || c == ',' || c == ']' || c == '}' || c == '/'; // '/' -> Comment
     }

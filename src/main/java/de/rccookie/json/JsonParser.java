@@ -1,10 +1,10 @@
-package com.github.rccookie.json;
+package de.rccookie.json;
 
 import java.io.IOException;
 import java.io.Reader;
 import java.io.UncheckedIOException;
 
-import com.github.rccookie.util.IterableIterator;
+import de.rccookie.util.IterableIterator;
 
 /**
  * Parser class to parse json formatted string data into json elements. The
@@ -76,7 +76,7 @@ public class JsonParser implements IterableIterator<JsonElement>, AutoCloseable 
     public JsonElement next() throws JsonParseException {
         if(closed) throw new IllegalStateException("Parser has been closed");
         if(!hasNext()) throw new JsonParseException("Blank string is not a valid json value", json);
-        return JsonElement.wrapNullable(parseNextValue());
+        return JsonElement.wrap(parseNextValue());
     }
 
 

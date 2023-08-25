@@ -1,20 +1,22 @@
-package com.github.rccookie.json;
+package de.rccookie.json;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Objects;
 
-import com.github.rccookie.util.IterableIterator;
+import de.rccookie.util.IterableIterator;
 
 import org.jetbrains.annotations.NotNull;
 
-import static com.github.rccookie.json.Json.extractJson;
+import static de.rccookie.json.Json.serialize;
 
 /**
  * Represents an abstract json array. A json object can hold any type of
@@ -117,7 +119,7 @@ public class JsonArray implements List<Object>, JsonStructure {
 
     @Override
     public boolean add(Object o) {
-        return data.add(extractJson(o));
+        return data.add(serialize(o));
     }
 
     @Override
@@ -132,7 +134,7 @@ public class JsonArray implements List<Object>, JsonStructure {
 
     @Override
     public void add(int index, Object element) {
-        data.add(index, extractJson(element));
+        data.add(index, serialize(element));
     }
 
     @Override
@@ -198,12 +200,12 @@ public class JsonArray implements List<Object>, JsonStructure {
 
             @Override
             public void set(Object o) {
-                it.set(extractJson(o));
+                it.set(serialize(o));
             }
 
             @Override
             public void add(Object o) {
-                it.add(extractJson(o));
+                it.add(serialize(o));
             }
         };
     }
@@ -216,7 +218,7 @@ public class JsonArray implements List<Object>, JsonStructure {
 
     @Override
     public Object set(int index, Object element) {
-        return data.set(index, extractJson(element));
+        return data.set(index, serialize(element));
     }
 
     @Override
@@ -337,7 +339,7 @@ public class JsonArray implements List<Object>, JsonStructure {
      * @return A json element as described above
      */
     public JsonElement getElement(int index) {
-        return index < size() ? JsonElement.wrapNullable(get(index)) : JsonElement.EMPTY;
+        return index < size() ? JsonElement.wrap(get(index)) : JsonElement.EMPTY;
     }
 
 
@@ -493,13 +495,13 @@ public class JsonArray implements List<Object>, JsonStructure {
 
 
     /**
-     * Returns an {@link IterableIterator} over the elements in this
+     * Returns an {@link IterableIterator} over the non-null elements in this
      * array, each wrapped in a {@link JsonElement}.
      *
-     * @return An IterableIterator over the json elements of this array
+     * @return An IterableIterator over the non-null json elements of this array
      */
     public IterableIterator<JsonElement> elements() {
-        Iterator<JsonElement> it = stream().map(JsonElement::wrapNullable).iterator();
+        Iterator<Object> it = stream().filter(Objects::nonNull).iterator();
         return new IterableIterator<>() {
             @Override
             public boolean hasNext() {
@@ -508,7 +510,7 @@ public class JsonArray implements List<Object>, JsonStructure {
 
             @Override
             public JsonElement next() {
-                return it.next();
+                return JsonElement.wrap(it.next());
             }
         };
     }
@@ -538,17 +540,11 @@ public class JsonArray implements List<Object>, JsonStructure {
         }
     }
 
-    /**
-     * Stores this json array in the given file. The file will be cleared
-     * if it exists, otherwise a new file will be created.
-     *
-     * @param file The file to store the array in
-     * @return Weather the storing was successful
-     */
     @Override
-    public boolean store(File file) {
+    public boolean load(Path file) {
+        clear();
         try {
-            Json.store(this, file);
+            addAll(Json.load(file).asArray());
             return true;
         } catch(UncheckedIOException e) {
             return false;

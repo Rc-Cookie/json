@@ -1,4 +1,4 @@
-package com.github.rccookie.json;
+package de.rccookie.json;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

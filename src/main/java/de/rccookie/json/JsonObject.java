@@ -1,8 +1,9 @@
-package com.github.rccookie.json;
+package de.rccookie.json;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -13,8 +14,6 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import org.jetbrains.annotations.NotNull;
-
-import static com.github.rccookie.json.Json.extractJson;
 
 /**
  * Represents an abstract json object. A json object can hold any type of
@@ -165,7 +164,7 @@ public class JsonObject implements Map<String, Object>, JsonStructure {
 
     @Override
     public Object put(String key, Object value) {
-        return data.put(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), extractJson(value));
+        return data.put(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), Json.serialize(value));
     }
 
     @Override
@@ -203,22 +202,22 @@ public class JsonObject implements Map<String, Object>, JsonStructure {
 
     @Override
     public Object putIfAbsent(String key, Object value) {
-        return data.putIfAbsent(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), extractJson(value));
+        return data.putIfAbsent(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), Json.serialize(value));
     }
 
     @Override
     public Object compute(String key, BiFunction<? super String, ? super Object, ?> remappingFunction) {
-        return data.compute(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), (k,v) -> extractJson(remappingFunction.apply(k,v)));
+        return data.compute(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), (k,v) -> Json.serialize(remappingFunction.apply(k,v)));
     }
 
     @Override
     public Object computeIfAbsent(String key, Function<? super String, ?> mappingFunction) {
-        return data.computeIfAbsent(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), k -> extractJson(mappingFunction.apply(k)));
+        return data.computeIfAbsent(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), k -> Json.serialize(mappingFunction.apply(k)));
     }
 
     @Override
     public Object computeIfPresent(String key, BiFunction<? super String, ? super Object, ?> remappingFunction) {
-        return data.computeIfPresent(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), (k,v) -> extractJson(remappingFunction.apply(k,v)));
+        return data.computeIfPresent(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), (k,v) -> Json.serialize(remappingFunction.apply(k,v)));
     }
 
     /**
@@ -243,7 +242,7 @@ public class JsonObject implements Map<String, Object>, JsonStructure {
      * @return A json element as described above
      */
     public JsonElement getElement(String key) {
-        return containsKey(key) ? JsonElement.wrapNullable(get(key)) : JsonElement.EMPTY;
+        return JsonElement.wrap(get(key));
     }
 
     @Override
@@ -263,12 +262,12 @@ public class JsonObject implements Map<String, Object>, JsonStructure {
         other.forEach((k,v) -> {
             if(v == null) putIfAbsent(k, null);
             else if(v instanceof JsonObject) {
-                JsonObject current = getElement(k).orNull();
+                JsonObject current = getObject(k);
                 if(current == null) put(k, v);
                 else current.combine((JsonObject) v);
             }
             else if(v instanceof JsonArray) {
-                JsonArray current = getElement(k).orNull();
+                JsonArray current = getArray(k);
                 if(current == null) put(k, v);
                 else current.combine((JsonArray) v);
             }
@@ -287,7 +286,7 @@ public class JsonObject implements Map<String, Object>, JsonStructure {
      * @return The mapped json object, or {@code null}
      */
     public JsonObject getObject(String key) {
-        return getElement(key).asObject();
+        return (JsonObject) get(key);
     }
 
     /**
@@ -299,7 +298,7 @@ public class JsonObject implements Map<String, Object>, JsonStructure {
      * @return The mapped json array, or {@code null}
      */
     public JsonArray getArray(String key) {
-        return getElement(key).asArray();
+        return (JsonArray) get(key);
     }
 
     /**
@@ -311,7 +310,7 @@ public class JsonObject implements Map<String, Object>, JsonStructure {
      * @return The mapped string, or {@code null}
      */
     public String getString(String key) {
-        return getElement(key).asString();
+        return (String) get(key);
     }
 
     /**
@@ -371,7 +370,7 @@ public class JsonObject implements Map<String, Object>, JsonStructure {
      * @return The mapped boolean, or {@code null}
      */
     public Boolean getBool(String key) {
-        return getElement(key).asBool();
+        return (Boolean) get(key);
     }
 
 
@@ -399,17 +398,11 @@ public class JsonObject implements Map<String, Object>, JsonStructure {
         }
     }
 
-    /**
-     * Stores this json object in the given file. The file will be cleared
-     * if it exists, otherwise a new file will be created.
-     *
-     * @param file The file to store the structure in
-     * @return Weather the storing was successful
-     */
     @Override
-    public boolean store(File file) {
+    public boolean load(Path file) {
+        clear();
         try {
-            Json.store(this, file);
+            putAll(Json.load(file).asObject());
             return true;
         } catch(UncheckedIOException e) {
             return false;

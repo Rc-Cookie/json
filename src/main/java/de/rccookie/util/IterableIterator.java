@@ -1,4 +1,4 @@
-package com.github.rccookie.util;
+package de.rccookie.util;
 
 import java.util.Iterator;
 import java.util.NoSuchElementException;
