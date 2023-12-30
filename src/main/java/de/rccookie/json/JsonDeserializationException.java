@@ -6,7 +6,7 @@ public class JsonDeserializationException extends RuntimeException {
     private final Class<?> targetClass;
 
     public JsonDeserializationException(JsonElement json, Class<?> targetClass, Throwable cause) {
-        super("Failed to deserialize json '"+(json.isArray()?"[...]":json.isObject()?"{...}":Json.toString(json, false))+"' to "+targetClass, cause);
+        super("Failed to deserialize json '"+(json.isArray()?"[...]":json.isObject()?"{...}":Json.toString(json, false))+"' to "+targetClass.getSimpleName(), cause);
         this.json = json;
         this.targetClass = targetClass;
     }

@@ -15,6 +15,7 @@ import java.util.Objects;
 import de.rccookie.util.IterableIterator;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import static de.rccookie.json.Json.serialize;
 
@@ -129,6 +130,7 @@ public class JsonArray implements List<Object>, JsonStructure {
 
     @Override
     public boolean containsAll(@NotNull Collection<?> c) {
+        //noinspection SlowListContainsAll
         return data.containsAll(c);
     }
 
@@ -254,14 +256,17 @@ public class JsonArray implements List<Object>, JsonStructure {
     }
 
     /**
-     * Creates a shallow copy of this json array by creating a new
-     * instance with the same content (which will not be cloned).
+     * Creates a deep copy of this json array by creating a new
+     * instance with the content also cloned.
      *
      * @return A copy of this json array
      */
     @Override
     public JsonArray clone() {
-        return new JsonArray(this);
+        JsonArray copy = new JsonArray();
+        for(Object o : this)
+            copy.add(o instanceof JsonStructure ? ((JsonStructure) o).clone() : o);
+        return copy;
     }
 
     /**
@@ -373,6 +378,60 @@ public class JsonArray implements List<Object>, JsonStructure {
             }
             else if(get(i) == null) set(i, v);
         }
+    }
+
+    @Override
+    public JsonArray merge(@Nullable Object otherStructure) {
+        if(otherStructure != null && !(otherStructure instanceof JsonArray))
+            throw new IllegalArgumentException("Cannot merge JsonArray and "+otherStructure.getClass().getSimpleName());
+        return merge((JsonArray) otherStructure);
+    }
+
+    /**
+     * Returns a new json array with the given array merged recursively as follows:
+     * <ul>
+     *     <li>If one of the arrays is longer than the other one, the extra items
+     *     from the longer one will be included in the merge (as copy).</li>
+     *     <li>If one of the arrays has null assigned to a given index, the other
+     *     array's value at that index will be used (copied).</li>
+     *     <li>If both of the arrays have a json object or a json array at a given index,
+     *     the objects / arrays will be merged and that structure assigned to the index.</li>
+     *     <li>If both of the arrays have a primitive non-null value (including strings)
+     *     at a given index, this array's value will be used, the other array's value
+     *     will be discarded.</li>
+     *     <li>If both of the arrays have a value at the same index, but one of them is
+     *     a json structure and the other one a primitive type, or one of the values is
+     *     an object and the other one an array, an {@link IllegalArgumentException}
+     *     will be thrown</li>
+     * </ul>
+     * This instance itself will not be modified.
+     *
+     * @param other The json object to be merged with this one
+     * @return A deep copy of this json object with the given json object merged into it
+     * @throws IllegalArgumentException If this json object cannot be merged with the
+     *                                  given object, e.g. because a json structure
+     *                                  has to be merged with a primitive (or string)
+     *                                  at top level or in a recursive merge
+     */
+    public JsonArray merge(@Nullable JsonArray other) {
+        if(other == null)
+            return clone();
+
+        JsonArray merged = new JsonArray();
+        for(int i = 0; i < Math.min(size(), other.size()); i++) {
+            Object val = get(i);
+            Object otherVal = other.get(i);
+            if(val == null)
+                merged.add(otherVal instanceof JsonStructure ? ((JsonStructure) otherVal).clone() : otherVal);
+            else if(val instanceof JsonStructure)
+                merged.add(((JsonStructure) val).merge(otherVal));
+            else merged.add(val);
+        }
+        for(int i = Math.min(size(), other.size()); i < size(); i++)
+            merged.add(get(i));
+        for(int i = Math.min(size(), other.size()); i < other.size(); i++)
+            merged.add(other.get(i));
+        return merged;
     }
 
 

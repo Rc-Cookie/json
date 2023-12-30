@@ -14,6 +14,7 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Represents an abstract json object. A json object can hold any type of
@@ -90,14 +91,16 @@ public class JsonObject implements Map<String, Object>, JsonStructure {
 
 
     /**
-     * Creates a shallow copy of this json object by creating a new
-     * instance with the same content (which will not be cloned).
+     * Creates a deep copy of this json object by creating a new
+     * instance with the content also cloned.
      *
      * @return A copy of this json object
      */
     @Override
     public JsonObject clone() {
-        return new JsonObject(this);
+        JsonObject copy = new JsonObject();
+        forEach((k,v) -> copy.put(k, v instanceof JsonStructure ? ((JsonStructure) v).clone() : v));
+        return copy;
     }
 
     /**
@@ -206,17 +209,17 @@ public class JsonObject implements Map<String, Object>, JsonStructure {
     }
 
     @Override
-    public Object compute(String key, BiFunction<? super String, ? super Object, ?> remappingFunction) {
+    public Object compute(String key, @NotNull BiFunction<? super String, ? super Object, ?> remappingFunction) {
         return data.compute(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), (k,v) -> Json.serialize(remappingFunction.apply(k,v)));
     }
 
     @Override
-    public Object computeIfAbsent(String key, Function<? super String, ?> mappingFunction) {
+    public Object computeIfAbsent(String key, @NotNull Function<? super String, ?> mappingFunction) {
         return data.computeIfAbsent(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), k -> Json.serialize(mappingFunction.apply(k)));
     }
 
     @Override
-    public Object computeIfPresent(String key, BiFunction<? super String, ? super Object, ?> remappingFunction) {
+    public Object computeIfPresent(String key, @NotNull BiFunction<? super String, ? super Object, ?> remappingFunction) {
         return data.computeIfPresent(Objects.requireNonNull(key, "Json objects don't permit 'null' as key"), (k,v) -> Json.serialize(remappingFunction.apply(k,v)));
     }
 
@@ -273,6 +276,64 @@ public class JsonObject implements Map<String, Object>, JsonStructure {
             }
             else if(!containsKey(k)) put(k, v);
         });
+    }
+
+    @Override
+    public JsonObject merge(@Nullable Object otherStructure) {
+        if(otherStructure != null && !(otherStructure instanceof JsonObject))
+            throw new IllegalArgumentException("Cannot merge JsonObject and "+otherStructure.getClass().getSimpleName());
+        return merge((JsonObject) otherStructure);
+    }
+
+    /**
+     * Returns a new json object with the given object merged recursively as follows:
+     * <ul>
+     *     <li>If only one of the objects has a given key, that key-value-pair will be
+     *     in the result (copied).</li>
+     *     <li>If both of the objects have a given key, but one of their values is null,
+     *     the other value will be used (copied).</li>
+     *     <li>If both of the objects have a json object or a json array mapped to a
+     *     given key, the objects / arrays will be merged and that structure assigned to
+     *     the key.</li>
+     *     <li>If both of the objects have a primitive non-null value (including strings)
+     *     mapped to a given key, this object's value will be used, the other object's
+     *     value will be discarded.</li>
+     *     <li>If both of the objects have a value, but one of them is a json structure and
+     *     the other one a primitive type, or one of the values is an object and the other
+     *     one an array, an {@link IllegalArgumentException} will be thrown</li>
+     * </ul>
+     * This instance itself will not be modified.
+     *
+     * @param other The json object to be merged with this one
+     * @return A deep copy of this json object with the given json object merged into it
+     * @throws IllegalArgumentException If this json object cannot be merged with the
+     *                                  given object, e.g. because a json structure
+     *                                  has to be merged with a primitive (or string)
+     *                                  at top level or in a recursive merge
+     */
+    public JsonObject merge(@Nullable JsonObject other) {
+        if(other == null)
+            return clone();
+
+        JsonObject merged = new JsonObject();
+        for(String key : keySet()) {
+            Object val = get(key);
+            if(!other.containsKey(key))
+                merged.put(key, val instanceof JsonStructure ? ((JsonStructure) val).clone() : val);
+            else {
+                Object otherVal = other.get(key);
+                if(val == null)
+                    merged.put(key, otherVal instanceof JsonStructure ? ((JsonStructure) otherVal).clone() : otherVal);
+                else if(val instanceof JsonStructure)
+                    merged.put(key, ((JsonStructure) val).merge(otherVal));
+                else merged.put(key, val);
+            }
+        }
+        other.forEach((k,v) -> {
+            if(!merged.containsKey(k))
+                merged.put(k, v instanceof JsonStructure ? ((JsonStructure) v).clone() : v);
+        });
+        return merged;
     }
 
 

@@ -5,6 +5,8 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
 
+import org.jetbrains.annotations.Nullable;
+
 /**
  * Superclass of {@link JsonObject} and {@link JsonArray}.
  */
@@ -198,12 +200,27 @@ public interface JsonStructure extends Cloneable {
     String toString(boolean formatted);
 
     /**
-     * Creates a shallow copy of this json object by creating a new
-     * instance with the same content (which will not be cloned).
+     * Creates a deep copy of this json structure by creating a new
+     * instance with the content also cloned.
      *
-     * @return A copy of this json object
+     * @return A copy of this json structure
      */
     JsonStructure clone();
+
+    /**
+     * Returns a new json structure of the same type as this one, with
+     * the given object merged recursively. The object must also be of the same type
+     * as this structure, or <code>null</code>. This instance will not
+     * be modified.
+     *
+     * @param otherStructure The structure to be merged with this one
+     * @return A deep copy of this structure with the given structure merged into it
+     * @throws IllegalArgumentException If this structure cannot be merged with the
+     *                                  given object, e.g. because a json structure
+     *                                  has to be merged with a primitive (or string)
+     *                                  at top level or in a recursive merge
+     */
+    JsonStructure merge(@Nullable Object otherStructure);
 
     /**
      * Returns a {@link JsonElement} with the value mapped at the specified

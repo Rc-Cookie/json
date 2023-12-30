@@ -1,6 +1,6 @@
 package de.rccookie.json;
 
-public class IllegalDefaultValueException extends RuntimeException {
+public class IllegalDefaultValueException extends IllegalJsonDeserializerException {
     public IllegalDefaultValueException(String msg) {
         super(msg);
     }
