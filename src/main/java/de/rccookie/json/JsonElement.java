@@ -182,12 +182,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      */
     @NotNull
     public <T> List<T> asList(Class<T> contentType) {
-        if(value == null) return List.of();
-        JsonArray array = (JsonArray) value;
-        List<T> list = new ArrayList<>(array.size());
-        for(int i=0; i<array.size(); i++)
-            list.add(deserializer.deserialize(contentType, array.getElement(i).withDeserializer(deserializer)));
-        return list;
+        return asCollection(contentType, ArrayList::new);
     }
 
     /**
@@ -200,12 +195,27 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      */
     @NotNull
     public <T> Set<T> asSet(Class<T> contentType) {
-        if(value == null) return Set.of();
+        return asCollection(contentType, HashSet::new);
+    }
+
+    /**
+     * Returns a collection of the specified type containing all elements of the {@link JsonArray}
+     * contained in this json element, each deserialized to the specified type.
+     *
+     * @param contentType The type to deserialize the elements to
+     * @param collectionCtor A constructor for the type of collection that should be returned
+     * @return The json array deserialized to the specified collection type, or an empty collection of that type
+     * @throws ClassCastException If a value is present and is not convertible to a json array
+     */
+    @NotNull
+    public <T, C extends Collection<? super T>> C asCollection(Class<T> contentType, Supplier<C> collectionCtor) {
+        C col = Objects.requireNonNull(collectionCtor, "collectionCtor").get();
+        if(value == null) return col;
+
         JsonArray array = (JsonArray) value;
-        Set<T> set = new HashSet<>(array.size());
         for(int i=0; i<array.size(); i++)
-            set.add(deserializer.deserialize(contentType, array.getElement(i).withDeserializer(deserializer)));
-        return set;
+            col.add(deserializer.deserialize(contentType, array.getElement(i).withDeserializer(deserializer)));
+        return col;
     }
 
     /**
@@ -220,9 +230,25 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      */
     @NotNull
     public <T> Map<String, T> asMap(Class<T> valueType) {
-        if(value == null) return Map.of();
+        return asCustomMap(valueType, HashMap::new);
+    }
+
+    /**
+     * Returns a map of the specified implementation type containing all entries of the
+     * {@link JsonObject} contained in this json element, each value being deserialized to
+     * the specified type. If the value of the json element is <code>null</code>, an empty
+     * map will be returned.
+     *
+     * @param valueType The type to deserialize the values to (the keys are strings)
+     * @param mapCtor A constructor for the type of map that should be returned
+     * @return The json object deserialized to a map, or an empty map
+     * @throws ClassCastException If a value is present and is not convertible to a json object
+     */
+    @NotNull
+    public <T, M extends Map<? super String, ? super T>> M asCustomMap(Class<T> valueType, Supplier<M> mapCtor) {
+        M map = mapCtor.get();
+        if(value == null) return map;
         JsonObject obj = (JsonObject) value;
-        Map<String,T> map = new HashMap<>(obj.size());
         obj.forEach((k,v) -> map.put(k, wrap(v, deserializer).as(valueType)));
         return map;
     }
@@ -244,8 +270,29 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * @throws ClassCastException If a value is present and is not convertible to a json object or array
      */
     public <K,V> Map<K,V> asMap(Class<K> keyType, Class<V> valueType) {
-        if(value == null) return Map.of();
-        Map<K, V> map = new HashMap<>(size());
+        return asCustomMap(keyType, valueType, HashMap::new);
+    }
+
+    /**
+     * Deserializes this json data as a map of the specified implementation type. If the value
+     * of this json element is a {@link JsonObject}, the keys will be deserialized into the key
+     * type and the values to the value type. If the value of this json element is a {@link JsonArray},
+     * the elements of the array must be key-value pairs as follows:
+     * <pre>
+     * [{ "key": 1, "value": "A" }, { "key": 2, "value": "B" }]
+     * OR
+     * [[1,"A"], [2,"B"]]
+     * </pre>
+     *
+     * @param keyType The type to deserialize keys to
+     * @param valueType The type to deserialize values to
+     * @param mapCtor A constructor for the type of map that should be returned
+     * @return The deserialized map, or an empty map
+     * @throws ClassCastException If a value is present and is not convertible to a json object or array
+     */
+    public <K,V, M extends Map<? super K, ? super V>> M asCustomMap(Class<K> keyType, Class<V> valueType, Supplier<M> mapCtor) {
+        M map = mapCtor.get();
+        if(value == null) return map;
         if(value instanceof JsonObject)
             forEach((k, v) -> map.put(wrap(k, deserializer).as(keyType), v.as(valueType)));
         else for(JsonElement entry : this) {
