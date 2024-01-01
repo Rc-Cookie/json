@@ -46,11 +46,23 @@ import java.util.function.IntUnaryOperator;
 import java.util.function.Supplier;
 
 import org.jetbrains.annotations.NotNull;
+import sun.misc.Unsafe;
 
 final class JsonSerialization {
 
     private JsonSerialization() { }
 
+
+    private static final Unsafe UNSAFE;
+    static {
+        try {
+            Field f = Unsafe.class.getDeclaredField("theUnsafe");
+            f.setAccessible(true);
+            UNSAFE = (Unsafe) f.get(null);
+        } catch(NoSuchFieldException | IllegalAccessException e) {
+            throw new AssertionError(e);
+        }
+    }
 
     private static final Function<JsonSerializable,?> JSON_SERIALIZABLE_SERIALIZER = JsonSerializable::toJson;
     private static final Function<?,JsonArray> ARRAY_SERIALIZER = arr -> {
@@ -379,6 +391,9 @@ final class JsonSerialization {
         if(isRecord(type))
             return generateRecordSerializer(type);
 
+        if(!type.isInterface() && !Modifier.isAbstract(type.getModifiers()))
+            return generateUnsafeSerializer(type);
+
         throw new IllegalJsonTypeException(type);
     }
 
@@ -412,10 +427,28 @@ final class JsonSerialization {
         }
     }
 
+    @SuppressWarnings("unchecked")
+    private static Function<?,?> generateUnsafeSerializer(Class<?> type) {
+        Field[] fields = Arrays.stream(type.getDeclaredFields()).filter(f -> !Modifier.isStatic(f.getModifiers())).toArray(Field[]::new);
+        Function<Object,?>[] getters = new Function[fields.length];
+        for(int i=0; i<fields.length; i++)
+            getters[i] = getUnsafeGetter(fields[i]);
+
+        return obj -> {
+            JsonObject json = new JsonObject();
+            for(int i=0; i<getters.length; i++)
+                json.put(fields[i].getName(), serialize(getters[i].apply(obj)));
+            return json;
+        };
+    }
+
 
 
     @SuppressWarnings({"unchecked", "DuplicatedCode", "rawtypes"})
     private static <T> Function<JsonElement, T> getDeserializer(Class<T> type) throws IllegalJsonDeserializerException {
+        if(type == Object.class)
+            throw new IllegalJsonDeserializerException("Cannot deserialize to java.lang.Object");
+
         // Deserialize to array component-wise
         if(type.isArray()) {
             Class<?> contentType = type.getComponentType();
@@ -454,12 +487,18 @@ final class JsonSerialization {
                 };
                 DESERIALIZERS.put(type, deserializer);
                 return deserializer;
-            } catch (NoSuchMethodException e) {
+            } catch(NoSuchMethodException e) {
                 if(isRecord(type)) {
                     deserializer = getRecordDeserializer(type);
                     DESERIALIZERS.put(type, deserializer);
                     return deserializer;
                 }
+                if(!type.isInterface() && !Modifier.isAbstract(type.getModifiers())) {
+                    deserializer = getUnsafeDeserializer(type);
+                    DESERIALIZERS.put(type, deserializer);
+                    return deserializer;
+                }
+
                 throw new IllegalJsonDeserializerException("The type " + type.getSimpleName() + " is not marked from json deserialization");
             }
         }
@@ -482,7 +521,7 @@ final class JsonSerialization {
                         params[i] = jParam.as(paramTypes[i]);
                     else if(defaults[i] != null)
                         params[i] = defaults[i].get();
-                    else throw new MissingParameterException(paramTypes[i], "'"+keys[i]+"'");
+                    else throw new MissingFieldException(paramTypes[i], "'" + keys[i] + "'");
                 }
                 try { return ctor.newInstance(params); }
                 catch(Exception e) { throw new RuntimeException(e); }
@@ -509,7 +548,7 @@ final class JsonSerialization {
                         params[i] = jParam.as(paramTypes[i]);
                     else if(defaults[i] != null)
                         params[i] = defaults[i].get();
-                    else throw new MissingParameterException(paramTypes[i], "["+indices[i]+"]");
+                    else throw new MissingFieldException(paramTypes[i], "[" + indices[i] + "]");
                 }
                 try { return ctor.newInstance(params); }
                 catch (Exception e) { throw new RuntimeException(e); }
@@ -556,7 +595,7 @@ final class JsonSerialization {
                             param = jParam.as(types[0]);
                         else if(defaults[0] != null)
                             param = defaults[0].get();
-                        else throw new MissingParameterException(types[0], "'"+fields[0].getName()+"'");
+                        else throw new MissingFieldException(types[0], "'" + fields[0].getName() + "'");
                     } catch(RuntimeException e) {
                         // Try to deserialize as if serialized unpacked for backwards compatability
                         try {
@@ -581,13 +620,12 @@ final class JsonSerialization {
                 try {
                     Object[] args = new Object[types.length];
                     for(int i=0; i<args.length; i++) {
-
                         JsonElement jParam = json.get(fields[i].getName());
                         if(jParam.isPresent())
                             args[i] = jParam.as(types[i]);
                         else if(defaults[i] != null)
                             args[i] = defaults[i].get();
-                        else throw new MissingParameterException(types[i], "'"+fields[i].getName()+"'");
+                        else throw new MissingFieldException(types[i], "'" + fields[i].getName() + "'");
                     }
                     return ctor.newInstance(args);
                 } catch(InvocationTargetException e) {
@@ -599,6 +637,34 @@ final class JsonSerialization {
         } catch (NoSuchMethodException e) {
             throw new AssertionError(e);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> Function<JsonElement, T> getUnsafeDeserializer(Class<T> type) {
+        Field[] fields = Arrays.stream(type.getDeclaredFields()).filter(f -> !Modifier.isStatic(f.getModifiers())).toArray(Field[]::new);
+        BiConsumer<Object, Object>[] setters = new BiConsumer[fields.length];
+        for(int i=0; i<fields.length; i++)
+            setters[i] = getUnsafeSetter(fields[i]);
+        Supplier<?>[] defaults = getDefaults(fields);
+
+        return json -> {
+            try {
+                T t = (T) UNSAFE.allocateInstance(type);
+                for(int i=0; i<fields.length; i++) {
+                    JsonElement jField = json.get(fields[i].getName());
+                    Object val;
+                    if(jField.isPresent())
+                        val = jField.as(fields[i].getType());
+                    else if(defaults[i] != null)
+                        val = defaults[i].get();
+                    else throw new MissingFieldException(fields[i].getType(), "'"+fields[i].getName()+"'");
+                    setters[i].accept(t, val);
+                }
+                return t;
+            } catch(InstantiationException e) {
+                throw new RuntimeException(e);
+            }
+        };
     }
 
     private static Supplier<?>[] getDefaults(Constructor<?> ctor) {
@@ -624,6 +690,32 @@ final class JsonSerialization {
             defaults[i] = supplier;
         } catch(IllegalDefaultValueException e) {
             throw new IllegalDefaultValueException(ctor+": parameter "+(i+1)+": "+e.getMessage(), e);
+        }
+
+        return defaults;
+    }
+
+    private static Supplier<?>[] getDefaults(Field[] fields) {
+        Supplier<?>[] defaults = new Supplier<?>[fields.length];
+
+        for(int i=0; i<fields.length; i++) try {
+            Supplier<?> supplier = null;
+            boolean required = false;
+            for(Annotation a : fields[i].getAnnotations()) {
+                if(a instanceof Default)
+                    supplier = parseDefault((Default) a, fields[i].getType());
+                else required |= a instanceof Required;
+            }
+            if(supplier != null) {
+                if(required)
+                    throw new IllegalJsonDeserializerException(fields[i]+": Cannot be required and have a default value");
+            }
+            else if(!required && !fields[i].getType().isPrimitive())
+                supplier = NULL_SUPPLIER;
+
+            defaults[i] = supplier;
+        } catch(IllegalDefaultValueException e) {
+            throw new IllegalDefaultValueException(fields[i]+": "+e.getMessage(), e);
         }
 
         return defaults;
@@ -749,5 +841,51 @@ final class JsonSerialization {
         if(d.valueType() == void.class)
             throw new IllegalDefaultValueException("The 'valueType' parameter is required for the default value of a Collection or Map");
         return d.valueType();
+    }
+
+    private static Function<Object,?> getUnsafeGetter(Field field) {
+        long offset = UNSAFE.objectFieldOffset(field);
+        boolean isVolatile = Modifier.isVolatile(field.getModifiers());
+        Class<?> type = field.getType();
+        if(type.equals(boolean.class))
+            return isVolatile ? o -> UNSAFE.getBooleanVolatile(o, offset) : o -> UNSAFE.getBoolean(o, offset);
+        if(type.equals(byte.class))
+            return isVolatile ? o -> UNSAFE.getByteVolatile(o, offset) : o -> UNSAFE.getByte(o, offset);
+        if(type.equals(short.class))
+            return isVolatile ? o -> UNSAFE.getShortVolatile(o, offset) : o -> UNSAFE.getShort(o, offset);
+        if(type.equals(int.class))
+            return isVolatile ? o -> UNSAFE.getIntVolatile(o, offset) : o -> UNSAFE.getInt(o, offset);
+        if(type.equals(long.class))
+            return isVolatile ? o -> UNSAFE.getLongVolatile(o, offset) : o -> UNSAFE.getLong(o, offset);
+        if(type.equals(float.class))
+            return isVolatile ? o -> UNSAFE.getFloatVolatile(o, offset) : o -> UNSAFE.getFloat(o, offset);
+        if(type.equals(double.class))
+            return isVolatile ? o -> UNSAFE.getDoubleVolatile(o, offset) : o -> UNSAFE.getDouble(o, offset);
+        if(type.equals(char.class))
+            return isVolatile ? o -> UNSAFE.getCharVolatile(o, offset) : o -> UNSAFE.getChar(o, offset);
+        else return isVolatile ? o -> UNSAFE.getObjectVolatile(o, offset) : o -> UNSAFE.getObject(o, offset);
+    }
+
+    private static BiConsumer<Object,Object> getUnsafeSetter(Field field) {
+        long offset = UNSAFE.objectFieldOffset(field);
+        boolean isVolatile = Modifier.isVolatile(field.getModifiers());
+        Class<?> type = field.getType();
+        if(type.equals(boolean.class))
+            return isVolatile ? (o,x) -> UNSAFE.putBooleanVolatile(o, offset, (boolean) x) : (o,x) -> UNSAFE.putBoolean(o, offset, (boolean) x);
+        if(type.equals(byte.class))
+            return isVolatile ? (o,x) -> UNSAFE.putByteVolatile(o, offset, (byte) x) : (o,x) -> UNSAFE.putByte(o, offset, (byte) x);
+        if(type.equals(short.class))
+            return isVolatile ? (o,x) -> UNSAFE.putShortVolatile(o, offset, (short) x) : (o,x) -> UNSAFE.putShort(o, offset, (short) x);
+        if(type.equals(int.class))
+            return isVolatile ? (o,x) -> UNSAFE.putIntVolatile(o, offset, (int) x) : (o,x) -> UNSAFE.putInt(o, offset, (int) x);
+        if(type.equals(long.class))
+            return isVolatile ? (o,x) -> UNSAFE.putLongVolatile(o, offset, (long) x) : (o,x) -> UNSAFE.putLong(o, offset, (long) x);
+        if(type.equals(float.class))
+            return isVolatile ? (o,x) -> UNSAFE.putFloatVolatile(o, offset, (float) x) : (o,x) -> UNSAFE.putFloat(o, offset, (float) x);
+        if(type.equals(double.class))
+            return isVolatile ? (o,x) -> UNSAFE.putDoubleVolatile(o, offset, (double) x) : (o,x) -> UNSAFE.putDouble(o, offset, (double) x);
+        if(type.equals(char.class))
+            return isVolatile ? (o,x) -> UNSAFE.putCharVolatile(o, offset, (char) x) : (o,x) -> UNSAFE.putChar(o, offset, (char) x);
+        else return isVolatile ? (o,x) -> UNSAFE.putObjectVolatile(o, offset, x) : (o,x) -> UNSAFE.putObject(o, offset, x);
     }
 }
