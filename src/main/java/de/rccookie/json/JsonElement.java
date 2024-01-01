@@ -1,8 +1,15 @@
 package de.rccookie.json;
 
 import java.lang.reflect.Array;
+import java.lang.reflect.GenericArrayType;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
+import java.lang.reflect.WildcardType;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -19,7 +26,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import de.rccookie.util.IterableIterator;
-
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -39,20 +45,152 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
     /**
      * A json element with no value, i.e. null.
      */
-    public static final JsonElement EMPTY = new JsonElement(null, JsonDeserializer.DEFAULT);
+    public static final JsonElement EMPTY = new JsonElement(null, JsonDeserializer.DEFAULT, null);
 
     private final Object value;
     private final JsonDeserializer deserializer;
+    private final GenericContext context;
 
-    private JsonElement(Object value, JsonDeserializer deserializer) {
+    private JsonElement(Object value, JsonDeserializer deserializer, GenericContext context) {
         this.value = value;
         this.deserializer = Objects.requireNonNull(deserializer, "deserializer");
+        this.context = context;
     }
 
     @Override
     public Object toJson() {
         return value;
     }
+
+
+    JsonElement pushGenericContext(TypeVariable<?>[] typeVariables, Type[] actualTypes) {
+        if(typeVariables.length == 0) return this;
+        if(context == null)
+            return of(value, deserializer, new GenericContext()).pushGenericContext(typeVariables, actualTypes);
+        context.pushAllTypeValues(typeVariables, actualTypes);
+        return this;
+    }
+
+    @SuppressWarnings("UnusedReturnValue")
+    JsonElement popGenericContext(TypeVariable<?>[] typeVariables) {
+        if(typeVariables.length != 0)
+            context.popAllTypeValues(typeVariables);
+        return this;
+    }
+
+    JsonElement pushCurrentType(Type type) {
+        if(context == null)
+            return of(value, deserializer, new GenericContext()).pushCurrentType(type);
+        context.pushCurrentType(type);
+        return this;
+    }
+
+    @SuppressWarnings("UnusedReturnValue")
+    JsonElement popCurrentType() {
+        if(context != null)
+            context.popCurrentType();
+        return this;
+    }
+
+    Class<?> currentType() {
+        if(context == null)
+            throw new IllegalStateException("No deserialization context available");
+        return context.currentType();
+    }
+
+    JsonElement withContextOf(JsonElement contextJson) {
+        return context == contextJson.context ? this : of(value, deserializer, contextJson.context);
+    }
+
+    Type getActualType(TypeVariable<?> typeVariable) {
+        if(context == null)
+            throw new IllegalArgumentException("Missing generic type information about "+typeVariable+" for "+typeVariable.getGenericDeclaration());
+        return context.getActualType(typeVariable);
+    }
+
+    Class<?> resolveRawType(Type type) {
+        if(type instanceof Class<?>)
+            return (Class<?>) type;
+        if(context == null)
+            throw new IllegalArgumentException("Missing generic type information about "+type);
+        return context.resolveRawType(type);
+    }
+
+    /**
+     * Returns the actual values of the generic type parameter of the class that is currently being deserialized,
+     * e.g. if serializing to <code>MyClass&le;String></code>, the return value would be <code>[String.class]</code>.
+     * This can be used by custom deserializers to deserialize generic fields in a class.
+     *
+     * <p>If the current class is not generic, an empty array will be returned. If no deserialization is currently
+     * in process, an {@link IllegalStateException} will be thrown.</p>
+     *
+     * @return The actual types of the generic type variables of the class currently being deserialized
+     */
+    public Type[] typeParameters() {
+        return typeParameters(currentType());
+    }
+
+    /**
+     * Returns the actual values of the generic type parameter of the class that is currently being deserialized,
+     * e.g. if serializing to <code>MyClass&le;String></code>, the return value would be <code>[String.class]</code>.
+     * This can be used by custom deserializers to deserialize generic fields in a class.
+     *
+     * <p>If the current class is not generic, an empty array will be returned. If no deserialization is currently
+     * in process, an {@link IllegalStateException} will be thrown.</p>
+     *
+     * @return The actual types of the generic type variables of the class currently being deserialized
+     */
+    public Class<?>[] rawTypeParameters() {
+        TypeVariable<?>[] typeParameters = currentType().getTypeParameters();
+        Class<?>[] rawTypes = new Class<?>[typeParameters.length];
+        for(int i=0; i<typeParameters.length; i++)
+            rawTypes[i] = resolveRawType(getActualType(typeParameters[i]));
+        return rawTypes;
+    }
+
+    private Type[] typeParameters(Class<?> rawType) {
+        TypeVariable<?>[] typeParameters = rawType.getTypeParameters();
+        Type[] actualTypes = new Type[typeParameters.length];
+        for(int i=0; i<typeParameters.length; i++)
+            actualTypes[i] = getActualType(typeParameters[i]);
+        return actualTypes;
+    }
+
+    /**
+     * Returns the actual value of the single generic type parameter of the class that is currently being deserialized,
+     * e.g. if serializing to <code>MyClass&le;String></code>, the return value would be <code>String.class</code>.
+     * This can be used by custom deserializers to deserialize generic fields in a class with exactly one type parameter.
+     *
+     * <p>If the current class has no or more than 1 generic parameter, an {@link IllegalArgumentException} will be
+     * thrown. If no deserialization is currently in process, an {@link IllegalStateException} will be thrown.</p>
+     *
+     * @return The actual type of the generic type variable of the class currently being deserialized
+     */
+    public Type typeParameter() {
+        return typeParameter(currentType());
+    }
+
+    /**
+     * Returns the actual value of the single generic type parameter of the class that is currently being deserialized,
+     * e.g. if serializing to <code>MyClass&le;String></code>, the return value would be <code>String.class</code>.
+     * This can be used by custom deserializers to deserialize generic fields in a class with exactly one type parameter.
+     *
+     * <p>If the current class has no or more than 1 generic parameter, an {@link IllegalArgumentException} will be
+     * thrown. If no deserialization is currently in process, an {@link IllegalStateException} will be thrown.</p>
+     *
+     * @return The actual type of the generic type variable of the class currently being deserialized
+     */
+    public Class<?> rawTypeParameter() {
+        return resolveRawType(typeParameter());
+    }
+
+    private Type typeParameter(Class<?> rawTypeWithOneGenericParam) {
+        TypeVariable<?>[] typeParameters = rawTypeWithOneGenericParam.getTypeParameters();
+        if(typeParameters.length != 1)
+            throw new IllegalArgumentException("Expected type with 1 generic parameter, got "+rawTypeWithOneGenericParam.toGenericString());
+        return getActualType(typeParameters[0]);
+    }
+
 
     /**
      * Returns the deserializer used by this json element to deserialize values.
@@ -76,7 +214,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
     public JsonElement withDeserializer(JsonDeserializer deserializer) {
         if(this.deserializer == deserializer)
             return this;
-        return new JsonElement(value, deserializer);
+        return of(value, deserializer, context);
     }
 
     /**
@@ -119,7 +257,36 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * @param type The type to deserialize the value to
      */
     public <T> T as(Class<T> type) {
-        return deserializer.deserialize(type, this);
+        return type.cast(as((Type) type));
+    }
+
+    /**
+     * Returns the elements value as an instance of the given type using the
+     * annotated constructor or the deserializer registered using
+     * {@link Json#registerDeserializer(Class, Function)} (see there for more info).
+     * If no value is present,
+     * <ul>
+     *     <li>an empty array will be returned if the target type is an array type,</li>
+     *     <li>otherwise <code>null</code> will be returned.</li>
+     * </ul>
+     * If you want <code>null</code> as the default value for an array type, use
+     * <code>or(type, null)</code> instead.
+     *
+     * @param type The type to deserialize the value to
+     * @param typeParameters Generic type parameters of the given (raw) type
+     */
+    @SuppressWarnings("unchecked")
+    public <T> T as(Class<? super T> type, Type... typeParameters) {
+        return (T) type.cast(as(type(type, typeParameters)));
+    }
+
+    private static Type type(Class<?> rawType, Type... typeParameters) {
+        return typeParameters.length != 0 ? TypeBuilder.type(rawType, typeParameters) : rawType;
+    }
+
+    @SuppressWarnings("unchecked")
+    public <T> T as(Type type) {
+        return (T) deserializer.deserialize(type, this);
     }
 
     /**
@@ -160,15 +327,48 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * @return The json array deserialized to an array, or an empty array
      * @throws ClassCastException If a value is present and is not convertible to a json array
      */
-    @SuppressWarnings("unchecked")
     @NotNull
     public <T> T[] asArray(Class<T> contentType) {
+        return asArray0(contentType, contentType);
+    }
+
+    /**
+     * Returns an array containing all elements of the {@link JsonArray} contained
+     * in this json element, each deserialized to the specified type.
+     *
+     * @param contentType The type to deserialize the elements to
+     * @return The json array deserialized to an array, or an empty array
+     * @throws ClassCastException If a value is present and is not convertible to a json array
+     */
+    @SuppressWarnings({"unchecked", "RedundantCast"})
+    @NotNull
+    public <T> T[] asArray(Class<? super T> contentType, Type... typeParameters) {
+        return (T[]) as(contentType, type(contentType, typeParameters));
+    }
+
+    /**
+     * Returns an array containing all elements of the {@link JsonArray} contained
+     * in this json element, each deserialized to the specified type.
+     *
+     * @param contentType The type to deserialize the elements to
+     * @return The json array deserialized to an array, or an empty array
+     * @throws ClassCastException If a value is present and is not convertible to a json array
+     */
+    @SuppressWarnings({"unchecked", "RedundantCast"})
+    @NotNull
+    public <T> T[] asArray(Type contentType) {
+        return (T[]) as(resolveRawType(contentType), contentType);
+    }
+
+    @SuppressWarnings("unchecked")
+    @NotNull
+    private <T> T[] asArray0(Class<? super T> contentType, Type genericContentType) {
         if(value == null)
             return (T[]) Array.newInstance(contentType, 0);
         JsonArray array = (JsonArray) value;
         T[] arr = (T[]) Array.newInstance(contentType, array.size());
         for(int i=0; i<array.size(); i++)
-            arr[i] = deserializer.deserialize(contentType, array.getElement(i).withDeserializer(deserializer));
+            arr[i] = array.getElement(i).withDeserializer(deserializer).as(genericContentType);
         return arr;
     }
 
@@ -182,7 +382,33 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      */
     @NotNull
     public <T> List<T> asList(Class<T> contentType) {
-        return asCollection(contentType, ArrayList::new);
+        return asList((Type) contentType);
+    }
+
+    /**
+     * Returns a list containing all elements of the {@link JsonArray} contained
+     * in this json element, each deserialized to the specified type.
+     *
+     * @param contentType The type to deserialize the elements to
+     * @return The json array deserialized to a list, or an empty list
+     * @throws ClassCastException If a value is present and is not convertible to a json array
+     */
+    @NotNull
+    public <T> List<T> asList(Class<? super T> contentType, Type... typeParameters) {
+        return asList(type(contentType, typeParameters));
+    }
+
+    /**
+     * Returns a list containing all elements of the {@link JsonArray} contained
+     * in this json element, each deserialized to the specified type.
+     *
+     * @param contentType The type to deserialize the elements to
+     * @return The json array deserialized to a list, or an empty list
+     * @throws ClassCastException If a value is present and is not convertible to a json array
+     */
+    @NotNull
+    public <T> List<T> asList(Type contentType) {
+        return asCollection(ArrayList::new, contentType);
     }
 
     /**
@@ -195,26 +421,80 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      */
     @NotNull
     public <T> Set<T> asSet(Class<T> contentType) {
-        return asCollection(contentType, HashSet::new);
+        return asSet((Type) contentType);
+    }
+
+    /**
+     * Returns a set containing all elements of the {@link JsonArray} contained
+     * in this json element, each deserialized to the specified type.
+     *
+     * @param contentType The type to deserialize the elements to
+     * @return The json array deserialized to a set, or an empty set
+     * @throws ClassCastException If a value is present and is not convertible to a json array
+     */
+    @NotNull
+    public <T> Set<T> asSet(Class<? super T> contentType, Type... typeParameters) {
+        return asSet(type(contentType, typeParameters));
+    }
+
+    /**
+     * Returns a set containing all elements of the {@link JsonArray} contained
+     * in this json element, each deserialized to the specified type.
+     *
+     * @param contentType The type to deserialize the elements to
+     * @return The json array deserialized to a set, or an empty set
+     * @throws ClassCastException If a value is present and is not convertible to a json array
+     */
+    @NotNull
+    public <T> Set<T> asSet(Type contentType) {
+        return asCollection(HashSet::new, contentType);
     }
 
     /**
      * Returns a collection of the specified type containing all elements of the {@link JsonArray}
      * contained in this json element, each deserialized to the specified type.
      *
-     * @param contentType The type to deserialize the elements to
      * @param collectionCtor A constructor for the type of collection that should be returned
+     * @param contentType    The type to deserialize the elements to
      * @return The json array deserialized to the specified collection type, or an empty collection of that type
      * @throws ClassCastException If a value is present and is not convertible to a json array
      */
     @NotNull
-    public <T, C extends Collection<? super T>> C asCollection(Class<T> contentType, Supplier<C> collectionCtor) {
+    public <T, C extends Collection<? super T>> C asCollection(Supplier<C> collectionCtor, Class<T> contentType) {
+        return asCollection(collectionCtor, (Type) contentType);
+    }
+
+    /**
+     * Returns a collection of the specified type containing all elements of the {@link JsonArray}
+     * contained in this json element, each deserialized to the specified type.
+     *
+     * @param collectionCtor A constructor for the type of collection that should be returned
+     * @param contentType    The type to deserialize the elements to
+     * @return The json array deserialized to the specified collection type, or an empty collection of that type
+     * @throws ClassCastException If a value is present and is not convertible to a json array
+     */
+    @NotNull
+    public <T, C extends Collection<? super T>> C asCollection(Supplier<C> collectionCtor, Class<? super T> contentType, Type... typeParameters) {
+        return asCollection(collectionCtor, type(contentType, typeParameters));
+    }
+
+    /**
+     * Returns a collection of the specified type containing all elements of the {@link JsonArray}
+     * contained in this json element, each deserialized to the specified type.
+     *
+     * @param collectionCtor A constructor for the type of collection that should be returned
+     * @param contentType    The type to deserialize the elements to
+     * @return The json array deserialized to the specified collection type, or an empty collection of that type
+     * @throws ClassCastException If a value is present and is not convertible to a json array
+     */
+    @NotNull
+    public <T, C extends Collection<? super T>> C asCollection(Supplier<C> collectionCtor, Type contentType) {
         C col = Objects.requireNonNull(collectionCtor, "collectionCtor").get();
         if(value == null) return col;
 
         JsonArray array = (JsonArray) value;
         for(int i=0; i<array.size(); i++)
-            col.add(deserializer.deserialize(contentType, array.getElement(i).withDeserializer(deserializer)));
+            col.add(array.getElement(i).withDeserializer(deserializer).as(contentType));
         return col;
     }
 
@@ -230,7 +510,22 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      */
     @NotNull
     public <T> Map<String, T> asMap(Class<T> valueType) {
-        return asCustomMap(valueType, HashMap::new);
+        return asCustomMap(HashMap::new, valueType);
+    }
+
+    /**
+     * Returns a map containing all entries of the {@link JsonObject} contained
+     * in this json element, each value being deserialized to the specified type.
+     * If the value of the json element is <code>null</code>, an empty map will be
+     * returned.
+     *
+     * @param valueType The type to deserialize the values to (the keys are strings)
+     * @return The json object deserialized to a map, or an empty map
+     * @throws ClassCastException If a value is present and is not convertible to a json object
+     */
+    @NotNull
+    public <T> Map<String, T> asMap(Type valueType) {
+        return asCustomMap(HashMap::new, valueType);
     }
 
     /**
@@ -239,13 +534,29 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * the specified type. If the value of the json element is <code>null</code>, an empty
      * map will be returned.
      *
+     * @param mapCtor   A constructor for the type of map that should be returned
      * @param valueType The type to deserialize the values to (the keys are strings)
-     * @param mapCtor A constructor for the type of map that should be returned
      * @return The json object deserialized to a map, or an empty map
      * @throws ClassCastException If a value is present and is not convertible to a json object
      */
     @NotNull
-    public <T, M extends Map<? super String, ? super T>> M asCustomMap(Class<T> valueType, Supplier<M> mapCtor) {
+    public <T, M extends Map<? super String, ? super T>> M asCustomMap(Supplier<M> mapCtor, Class<T> valueType) {
+        return asCustomMap(mapCtor, (Type) valueType);
+    }
+
+    /**
+     * Returns a map of the specified implementation type containing all entries of the
+     * {@link JsonObject} contained in this json element, each value being deserialized to
+     * the specified type. If the value of the json element is <code>null</code>, an empty
+     * map will be returned.
+     *
+     * @param mapCtor   A constructor for the type of map that should be returned
+     * @param valueType The type to deserialize the values to (the keys are strings)
+     * @return The json object deserialized to a map, or an empty map
+     * @throws ClassCastException If a value is present and is not convertible to a json object
+     */
+    @NotNull
+    public <T, M extends Map<? super String, ? super T>> M asCustomMap(Supplier<M> mapCtor, Type valueType) {
         M map = mapCtor.get();
         if(value == null) return map;
         JsonObject obj = (JsonObject) value;
@@ -270,7 +581,27 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * @throws ClassCastException If a value is present and is not convertible to a json object or array
      */
     public <K,V> Map<K,V> asMap(Class<K> keyType, Class<V> valueType) {
-        return asCustomMap(keyType, valueType, HashMap::new);
+        return asCustomMap(HashMap::new, keyType, valueType);
+    }
+
+    /**
+     * Deserializes this json data as a map. If the value of this json element is
+     * a {@link JsonObject}, the keys will be deserialized into the key type and
+     * the values to the value type. If the value of this json element is a {@link JsonArray},
+     * the elements of the array must be key-value pairs as follows:
+     * <pre>
+     * [{ "key": 1, "value": "A" }, { "key": 2, "value": "B" }]
+     * OR
+     * [[1,"A"], [2,"B"]]
+     * </pre>
+     *
+     * @param keyType The type to deserialize keys to
+     * @param valueType The type to deserialize values to
+     * @return The deserialized map, or an empty map
+     * @throws ClassCastException If a value is present and is not convertible to a json object or array
+     */
+    public <K,V> Map<K,V> asMap(Type keyType, Type valueType) {
+        return asCustomMap(HashMap::new, keyType, valueType);
     }
 
     /**
@@ -284,13 +615,34 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * [[1,"A"], [2,"B"]]
      * </pre>
      *
-     * @param keyType The type to deserialize keys to
+     * @param mapCtor   A constructor for the type of map that should be returned
+     * @param keyType   The type to deserialize keys to
      * @param valueType The type to deserialize values to
-     * @param mapCtor A constructor for the type of map that should be returned
      * @return The deserialized map, or an empty map
      * @throws ClassCastException If a value is present and is not convertible to a json object or array
      */
-    public <K,V, M extends Map<? super K, ? super V>> M asCustomMap(Class<K> keyType, Class<V> valueType, Supplier<M> mapCtor) {
+    public <K,V, M extends Map<? super K, ? super V>> M asCustomMap(Supplier<M> mapCtor, Class<K> keyType, Class<V> valueType) {
+        return asCustomMap(mapCtor, (Type) keyType, valueType);
+    }
+
+    /**
+     * Deserializes this json data as a map of the specified implementation type. If the value
+     * of this json element is a {@link JsonObject}, the keys will be deserialized into the key
+     * type and the values to the value type. If the value of this json element is a {@link JsonArray},
+     * the elements of the array must be key-value pairs as follows:
+     * <pre>
+     * [{ "key": 1, "value": "A" }, { "key": 2, "value": "B" }]
+     * OR
+     * [[1,"A"], [2,"B"]]
+     * </pre>
+     *
+     * @param mapCtor   A constructor for the type of map that should be returned
+     * @param keyType   The type to deserialize keys to
+     * @param valueType The type to deserialize values to
+     * @return The deserialized map, or an empty map
+     * @throws ClassCastException If a value is present and is not convertible to a json object or array
+     */
+    public <K,V, M extends Map<? super K, ? super V>> M asCustomMap(Supplier<M> mapCtor, Type keyType, Type valueType) {
         M map = mapCtor.get();
         if(value == null) return map;
         if(value instanceof JsonObject)
@@ -466,7 +818,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * @throws NullPointerException If the value of this element is {@code null}
      */
     public JsonElement get(String key) {
-        return value != null ? of(asObject().get(key), deserializer) : EMPTY;
+        return value != null ? subElement(asObject().get(key)) : EMPTY;
     }
 
     /**
@@ -485,7 +837,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
             if(index < 0) throw new IndexOutOfBoundsException(index);
             return JsonElement.EMPTY;
         }
-        return of(asArray().get(index), deserializer);
+        return subElement(asArray().get(index));
     }
 
     /**
@@ -804,7 +1156,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
         if(value == null)
             return other.withDeserializer(deserializer);
         if(value instanceof JsonStructure)
-            return of(((JsonStructure) value).merge(other.value), deserializer);
+            return subElement(((JsonStructure) value).merge(other.value));
         if(other.value instanceof JsonStructure)
             throw new IllegalArgumentException("Cannot merge "+value.getClass().getSimpleName()+" with "+other.value.getClass().getSimpleName());
         return this;
@@ -845,7 +1197,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
             asObject();
             return this;
         }
-        return value != null ? of(asObject().merge(other), deserializer) : of(other, deserializer);
+        return value != null ? subElement(asObject().merge(other)) : subElement(other);
     }
 
     /**
@@ -883,7 +1235,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
             asArray();
             return this;
         }
-        return value != null ? of(asArray().merge(other), deserializer) : of(other, deserializer);
+        return value != null ? subElement(asArray().merge(other)) : subElement(other);
     }
 
 
@@ -1015,7 +1367,17 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * @param ifNotPresent The value to use if no non-null value is present
      * @return The value of the json element, or the specified value
      */
-    public <T> T or(Class<? extends T> type, T ifNotPresent) {
+    public <T> T or(Class<T> type, T ifNotPresent) {
+        return or((Type) type, ifNotPresent);
+    }
+
+    /**
+     * Returns the value of this json element, or the specified value if none is present.
+     *
+     * @param ifNotPresent The value to use if no non-null value is present
+     * @return The value of the json element, or the specified value
+     */
+    public <T> T or(Type type, T ifNotPresent) {
         return value != null ? as(type) : ifNotPresent;
     }
 
@@ -1040,7 +1402,19 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * @return The json object's value deserialized to the specified type, or the return
      *         value from the supplier
      */
-    public <T> T orGet(Class<? extends T> type, Supplier<? extends T> getIfNotPresent) {
+    public <T> T orGet(Class<T> type, Supplier<? extends T> getIfNotPresent) {
+        return orGet((Type) type, getIfNotPresent);
+    }
+
+    /**
+     * Returns the value of this json element, or the specified value if none is present.
+     *
+     * @param getIfNotPresent Supplier for the value to use if no non-null value
+     *                        is present
+     * @return The json object's value deserialized to the specified type, or the return
+     *         value from the supplier
+     */
+    public <T> T orGet(Type type, Supplier<? extends T> getIfNotPresent) {
         return value != null ? as(type) : getIfNotPresent.get();
     }
 
@@ -1135,7 +1509,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
     @NotNull
     public Collection<JsonElement> values() {
         if(value == null) return List.of();
-        return asObject().values().stream().filter(Objects::nonNull).map(o -> of(o, deserializer)).collect(Collectors.toList());
+        return asObject().values().stream().filter(Objects::nonNull).map(this::subElement).collect(Collectors.toList());
     }
 
     /**
@@ -1148,7 +1522,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      */
     @NotNull
     public Stream<JsonElement> stream() {
-        return value == null ? Stream.empty() : asArray().stream().filter(Objects::nonNull).map(o -> of(o, deserializer));
+        return value == null ? Stream.empty() : asArray().stream().filter(Objects::nonNull).map(this::subElement);
     }
 
     /**
@@ -1232,7 +1606,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
         if(value == null) return;
         asObject().forEach((k,v) -> {
             if(v != null)
-                action.accept(k, of(v, deserializer));
+                action.accept(k, subElement(v));
         });
     }
 
@@ -1251,10 +1625,92 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
     }
 
     public static JsonElement wrap(Object o, JsonDeserializer deserializer) {
-        return of(Json.serialize(o), deserializer);
+        return of(Json.serialize(o), deserializer, null);
     }
 
-    private static JsonElement of(Object o, JsonDeserializer deserializer) {
-        return o != null ? new JsonElement(o, deserializer) : EMPTY;
+    private JsonElement subElement(Object o) {
+        return of(o, deserializer, context);
+    }
+
+    private static JsonElement of(Object o, JsonDeserializer deserializer, GenericContext context) {
+        return o != null || context != null ? new JsonElement(o, deserializer, context) : EMPTY;
+    }
+
+
+
+    private static final class GenericContext {
+
+        private final Deque<Type> currentType = new ArrayDeque<>();
+        private final Map<TypeVariable<?>, Deque<Type>> typeVariableValues = new HashMap<>();
+
+        public void pushCurrentType(Type type) {
+            currentType.push(resolveRawType(type));
+        }
+
+        public void popCurrentType() {
+            currentType.pop();
+        }
+
+        public Class<?> currentType() {
+            Type type = currentType.getFirst();
+            if(!(type instanceof Class)) {
+                type = resolveRawType(type);
+                currentType.pop();
+                currentType.push(type);
+            }
+            return (Class<?>) type;
+        }
+
+        public void pushTypeValue(TypeVariable<?> typeVariable, Type value) {
+            typeVariableValues.computeIfAbsent(typeVariable, $ -> new ArrayDeque<>()).push(value);
+        }
+
+        public void pushAllTypeValues(TypeVariable<?>[] typeVariables, Type[] types) {
+            assert typeVariables.length == types.length;
+            for(int i=0; i<typeVariables.length; i++)
+                pushTypeValue(typeVariables[i], types[i]);
+        }
+
+        public void popTypeValue(TypeVariable<?> typeVariable) {
+            Deque<Type> stack = typeVariableValues.get(typeVariable);
+            stack.pop();
+            if(stack.isEmpty())
+                typeVariableValues.remove(typeVariable);
+        }
+
+        public void popAllTypeValues(TypeVariable<?>[] typeVariables) {
+            for(int i=0; i<typeVariables.length; i++)
+                popTypeValue(typeVariables[i]);
+        }
+
+        public Type getActualType(TypeVariable<?> typeVariable) {
+            Deque<Type> stack = typeVariableValues.get(typeVariable);
+            if(stack == null)
+                throw new IllegalArgumentException("Missing generic type information about "+typeVariable+" for "+typeVariable.getGenericDeclaration());
+            return stack.getFirst();
+        }
+
+        public Class<?> resolveRawType(Type type) {
+            int arrayDepth = 0;
+            while(!(type instanceof Class)) {
+                if(type instanceof TypeVariable<?>)
+                    type = getActualType((TypeVariable<?>) type);
+                else if(type instanceof GenericArrayType) {
+                    type = ((GenericArrayType) type).getGenericComponentType();
+                    arrayDepth++;
+                }
+                else if(type instanceof WildcardType) {
+                    Type[] bounds = ((WildcardType) type).getLowerBounds();
+                    if(bounds.length == 0)
+                        bounds = ((WildcardType) type).getUpperBounds();
+                    type = bounds[0];
+                }
+                else type = ((ParameterizedType) type).getRawType();
+            }
+            Class<?> cls = (Class<?>) type;
+            for(int i=0; i<arrayDepth; i++)
+                cls = Array.newInstance(cls, 0).getClass();
+            return cls;
+        }
     }
 }

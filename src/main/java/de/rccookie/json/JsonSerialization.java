@@ -5,9 +5,14 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
+import java.lang.reflect.WildcardType;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
@@ -25,25 +30,41 @@ import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Date;
+import java.util.Deque;
+import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableMap;
+import java.util.NavigableSet;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
+import java.util.PriorityQueue;
+import java.util.Properties;
+import java.util.Queue;
 import java.util.Set;
+import java.util.SortedMap;
+import java.util.SortedSet;
+import java.util.Stack;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
-import java.util.function.IntUnaryOperator;
-import java.util.function.Supplier;
 
 import org.jetbrains.annotations.NotNull;
 import sun.misc.Unsafe;
@@ -75,13 +96,13 @@ final class JsonSerialization {
     private static final Function<Enum<?>,?> DEFAULT_ENUM_SERIALIZER = Enum::name;
 
 
-    private static final Supplier<?> NULL_SUPPLIER = () -> null;
+    private static final Function<JsonElement,?> NULL_SUPPLIER = $ -> null;
 
 
     private static final Map<Class<?>, Function<?,?>> INTERFACE_SERIALIZERS = new HashMap<>();
     private static final Map<Class<?>, Function<?,?>> CONCRETE_SERIALIZERS = new HashMap<>();
     private static final Map<Class<?>, Function<?,?>> FIXED_SERIALIZERS = new HashMap<>();
-    private static final Map<Class<?>, Function<JsonElement, ?>> DESERIALIZERS = new HashMap<>();
+    private static final Map<Class<?>, Function<JsonElement,?>> DESERIALIZERS = new HashMap<>();
     private static final Map<Class<?>, Function<JsonElement,?>> FIXED_DESERIALIZERS = new HashMap<>();
 
     // Default serializers and deserializers
@@ -133,6 +154,69 @@ final class JsonSerialization {
                 return new JsonObject(serialized);
             return serialized.entrySet();
         });
+        registerDeserializer(Collection.class, json -> json.asList(json.typeParameter()));
+        registerDeserializer(List.class, json -> json.asList(json.typeParameter()));
+        registerDeserializer(ArrayList.class, json -> json.asCollection(ArrayList::new, json.typeParameter()));
+        registerDeserializer(LinkedList.class, json -> json.asCollection(LinkedList::new, json.typeParameter()));
+        registerDeserializer(Set.class, json -> json.asSet(json.typeParameter()));
+        registerDeserializer(HashSet.class, json -> json.asCollection(HashSet::new, json.typeParameter()));
+        registerDeserializer(LinkedHashSet.class, json -> json.asCollection(LinkedHashSet::new, json.typeParameter()));
+        registerDeserializer(SortedSet.class, json -> json.asCollection(TreeSet::new, json.typeParameter()));
+        registerDeserializer(NavigableSet.class, json -> json.asCollection(TreeSet::new, json.typeParameter()));
+        registerDeserializer(TreeSet.class, json -> json.asCollection(TreeSet::new, json.typeParameter()));
+        //noinspection unchecked,rawtypes
+        registerDeserializer(EnumSet.class, json -> json.asCollection(() -> EnumSet.noneOf((Class) json.rawTypeParameter()), json.typeParameter()));
+        registerDeserializer(Queue.class, json -> json.asCollection(ArrayDeque::new, json.typeParameter()));
+        registerDeserializer(PriorityQueue.class, json -> json.asCollection(PriorityQueue::new, json.typeParameter()));
+        registerDeserializer(Deque.class, json -> json.asCollection(ArrayDeque::new, json.typeParameter()));
+        registerDeserializer(ArrayDeque.class, json -> json.asCollection(ArrayDeque::new, json.typeParameter()));
+        registerDeserializer(Stack.class, json -> json.asCollection(Stack::new, json.typeParameter()));
+        registerDeserializer(Map.class, json -> {
+            Type[] types = json.typeParameters();
+            return json.asMap(types[0], types[1]);
+        });
+        registerDeserializer(HashMap.class, json -> {
+            Type[] types = json.typeParameters();
+            return json.asCustomMap(HashMap::new, types[0], types[1]);
+        });
+        registerDeserializer(LinkedHashMap.class, json -> {
+            Type[] types = json.typeParameters();
+            return json.asCustomMap(LinkedHashMap::new, types[0], types[1]);
+        });
+        registerDeserializer(TreeMap.class, json -> {
+            Type[] types = json.typeParameters();
+            return json.asCustomMap(TreeMap::new, types[0], types[1]);
+        });
+        registerDeserializer(SortedMap.class, json -> {
+            Type[] types = json.typeParameters();
+            return json.asCustomMap(TreeMap::new, types[0], types[1]);
+        });
+        registerDeserializer(NavigableMap.class, json -> {
+            Type[] types = json.typeParameters();
+            return json.asCustomMap(TreeMap::new, types[0], types[1]);
+        });
+        registerDeserializer(IdentityHashMap.class, json -> {
+            Type[] types = json.typeParameters();
+            return json.asCustomMap(IdentityHashMap::new, types[0], types[1]);
+        });
+        registerDeserializer(EnumMap.class, json -> {
+            Type[] types = json.typeParameters();
+            //noinspection rawtypes,unchecked
+            return json.asCustomMap(() -> new EnumMap(json.rawTypeParameters()[0]), types[0], types[1]);
+        });
+        registerDeserializer(Properties.class, json -> {
+            Type[] types = json.typeParameters();
+            return json.asCustomMap(Properties::new, types[0], types[1]);
+        });
+        //noinspection unchecked
+        registerSerializer(Optional.class, o -> o.orElse(null));
+        registerDeserializer(Optional.class, j -> Optional.ofNullable(j.as(j.currentType())));
+        registerSerializer(OptionalInt.class, o -> o.isPresent() ? o.getAsInt() : null);
+        registerDeserializer(OptionalInt.class, j -> j.isPresent() ? OptionalInt.of(j.asInt()) : OptionalInt.empty());
+        registerSerializer(OptionalLong.class, (OptionalLong o) -> o.isPresent() ? o.getAsLong() : null);
+        registerDeserializer(OptionalLong.class, j -> j.isPresent() ? OptionalLong.of(j.asLong()) : OptionalLong.empty());
+        registerSerializer(OptionalDouble.class, (OptionalDouble o) -> o.isPresent() ? o.getAsDouble() : null);
+        registerDeserializer(OptionalDouble.class, j -> j.isPresent() ? OptionalDouble.of(j.asInt()) : OptionalDouble.empty());
 
         FIXED_SERIALIZERS.putAll(CONCRETE_SERIALIZERS);
         FIXED_SERIALIZERS.putAll(INTERFACE_SERIALIZERS);
@@ -147,22 +231,13 @@ final class JsonSerialization {
         registerSerializer(Path.class, Object::toString);
         registerDeserializer(Path.class, j -> Path.of(j.asString()));
         registerSerializer(URL.class, URL::toString);
-        registerDeserializer(URL.class, j -> {try{ return new URL(j.asString()); }catch(MalformedURLException e){ throw new RuntimeException(e); }});
+        registerDeserializer(URL.class, j -> {try{ return URI.create(j.asString()).toURL(); }catch(MalformedURLException e){ throw new RuntimeException(e); }});
         registerSerializer(URI.class, URI::toString);
         registerDeserializer(URI.class, j -> URI.create(j.asString()));
         registerSerializer(UUID.class, Object::toString);
         registerDeserializer(UUID.class, j -> UUID.fromString(j.asString()));
         registerSerializer(Date.class, Date::getTime);
         registerDeserializer(Date.class, j -> new Date(j.asLong()));
-        //noinspection unchecked
-        registerSerializer(Optional.class, o -> o.orElse(null));
-        // Generic - no deserializer - can be done using JsonElement class
-        registerSerializer(OptionalInt.class, o -> o.isPresent() ? o.getAsInt() : null);
-        registerDeserializer(OptionalInt.class, j -> j.isPresent() ? OptionalInt.of(j.asInt()) : OptionalInt.empty());
-        registerSerializer(OptionalLong.class, (OptionalLong o) -> o.isPresent() ? o.getAsLong() : null);
-        registerDeserializer(OptionalLong.class, j -> j.isPresent() ? OptionalLong.of(j.asLong()) : OptionalLong.empty());
-        registerSerializer(OptionalDouble.class, (OptionalDouble o) -> o.isPresent() ? o.getAsDouble() : null);
-        registerDeserializer(OptionalDouble.class, j -> j.isPresent() ? OptionalDouble.of(j.asInt()) : OptionalDouble.empty());
         registerSerializer(Instant.class, (Instant i) -> new JsonObject(
                 "epochSecond", i.getEpochSecond(),
                 "nano", i.getNano()
@@ -331,16 +406,20 @@ final class JsonSerialization {
      * @throws IllegalJsonDeserializerException If an exception occurs while loading the
      *                                          deserializer of the class to deserialize to
      */
-    @SuppressWarnings("unchecked")
-    static <T> T deserialize(Class<T> type, JsonElement data) {
-        if(data.isEmpty())
-            return type.isArray() ? (T) Array.newInstance(type.getComponentType(), 0) : null;
+    static Object deserialize(Type type, JsonElement data) {
+        if(data.isEmpty()) {
+            Class<?> cls = data.resolveRawType(type);
+            return cls.isArray() ? Array.newInstance(cls.getComponentType(), 0) : null;
+        }
+        data = data.pushCurrentType(type);
         try {
             return getDeserializer(type).apply(data);
         } catch(IllegalJsonDeserializerException e) {
             throw e;
         } catch(RuntimeException e) {
             throw new JsonDeserializationException(data, type, e);
+        } finally {
+            data.popCurrentType();
         }
     }
 
@@ -445,15 +524,67 @@ final class JsonSerialization {
 
 
     @SuppressWarnings({"unchecked", "DuplicatedCode", "rawtypes"})
-    private static <T> Function<JsonElement, T> getDeserializer(Class<T> type) throws IllegalJsonDeserializerException {
+    private static Function<JsonElement,?> getDeserializer(Type type) throws IllegalJsonDeserializerException {
         if(type == Object.class)
             throw new IllegalJsonDeserializerException("Cannot deserialize to java.lang.Object");
 
-        // Deserialize to array component-wise
-        if(type.isArray()) {
-            Class<?> contentType = type.getComponentType();
+        if(type instanceof TypeVariable<?>)
+            return json -> json.as(json.getActualType((TypeVariable<?>) type));
+
+        if(type instanceof WildcardType) {
+            Type[] lowerBounds = ((WildcardType) type).getLowerBounds();
+            if(lowerBounds.length != 0)
+                return json -> json.as(lowerBounds[0]);
+            Type[] upperBounds = ((WildcardType) type).getUpperBounds();
+            return json -> json.as(upperBounds[0]);
+        }
+
+        if(type instanceof GenericArrayType) {
+            Type genericContentType = ((GenericArrayType) type).getGenericComponentType();
+            Type deepGenericContentType = genericContentType;
+            int depth = 1;
+            while(deepGenericContentType instanceof GenericArrayType) {
+                deepGenericContentType = ((GenericArrayType) deepGenericContentType).getGenericComponentType();
+                depth++;
+            }
+            Type _deepGenericContentType = deepGenericContentType;
+            int _depth = depth;
             return json -> {
-                T arr = (T) Array.newInstance(type.getComponentType(), json.size());
+
+                Type rawContentType = _deepGenericContentType;
+                while(rawContentType instanceof TypeVariable<?>)
+                    rawContentType = json.getActualType((TypeVariable<?>) rawContentType);
+                if(rawContentType instanceof ParameterizedType)
+                    rawContentType = ((ParameterizedType) rawContentType).getRawType();
+                for(int i=1; i<_depth; i++)
+                    rawContentType = Array.newInstance((Class<?>) rawContentType, 0).getClass();
+
+                Object arr = Array.newInstance((Class<?>) rawContentType, json.size());
+                for(int i=0; i<json.size(); i++)
+                    Array.set(arr, i, json.get(i).as(genericContentType));
+                return arr;
+            };
+        }
+
+        if(type instanceof ParameterizedType) {
+            ParameterizedType genericType = (ParameterizedType) type;
+            Class<?> rawType = (Class<?>) genericType.getRawType();
+            TypeVariable<?>[] genericParams = rawType.getTypeParameters();
+            return json -> {
+                json = json.pushGenericContext(genericParams, genericType.getActualTypeArguments());
+                Object obj = json.as(rawType);
+                json.popGenericContext(genericParams);
+                return obj;
+            };
+        }
+
+        Class<?> cls = (Class<?>) type;
+
+        // Deserialize to array component-wise
+        if(cls.isArray()) {
+            Class<?> contentType = cls.getComponentType();
+            return json -> {
+                Object arr = Array.newInstance(cls.getComponentType(), json.size());
                 for(int i=0; i<json.size(); i++)
                     Array.set(arr, i, json.get(i).as(contentType));
                 return arr;
@@ -461,130 +592,54 @@ final class JsonSerialization {
         }
 
         // Initialize class giving a chance to register a deserializer
-        loadType(type);
+        loadType(cls);
 
         // Check for custom or cached deserializer
-        Function<JsonElement, T> deserializer = (Function<JsonElement, T>) DESERIALIZERS.get(Objects.requireNonNull(type));
+        Function<JsonElement,?> deserializer = DESERIALIZERS.get(Objects.requireNonNull(type));
         if(deserializer != null) return deserializer;
 
         // Check for enum AFTER searching for custom deserializer
-        if(type.isEnum())
+        if(cls.isEnum())
             return generateEnumDeserializer((Class) type);
 
-        Constructor<T> ctor = (Constructor<T>) Arrays.stream(type.getDeclaredConstructors())
-                .peek(c -> c.setAccessible(true))
-                .filter(c -> c.isAnnotationPresent(JsonCtor.class))
-                .findAny()
-                .orElse(null);
-
-        if(ctor == null) {
-            try {
-                Constructor<T> altCtor = type.getDeclaredConstructor(/* paramType: */ JsonElement.class);
-                altCtor.setAccessible(true);
-                deserializer = j -> {
-                    try { return altCtor.newInstance(j); }
-                    catch(Exception e) { throw new RuntimeException(e); }
-                };
-                DESERIALIZERS.put(type, deserializer);
-                return deserializer;
-            } catch(NoSuchMethodException e) {
-                if(isRecord(type)) {
-                    deserializer = getRecordDeserializer(type);
-                    DESERIALIZERS.put(type, deserializer);
-                    return deserializer;
-                }
-                if(!type.isInterface() && !Modifier.isAbstract(type.getModifiers())) {
-                    deserializer = getUnsafeDeserializer(type);
-                    DESERIALIZERS.put(type, deserializer);
-                    return deserializer;
-                }
-
-                throw new IllegalJsonDeserializerException("The type " + type.getSimpleName() + " is not marked from json deserialization");
-            }
-        }
-
-        Supplier<?>[] defaults = getDefaults(ctor);
-        JsonCtor props = ctor.getAnnotation(JsonCtor.class);
-        Class<?>[] paramTypes = ctor.getParameterTypes();
-        Type packaging = props.type();
-
-        // Json object packaged
-        if(packaging == Type.OBJECT || (packaging == Type.AUTO && props.value().length != 0)) {
-            String[] keys = props.value();
-            if(keys.length != paramTypes.length)
-                throw new IllegalJsonDeserializerException("The annotated constructor of "+type.getSimpleName()+" has the wrong number of parameters");
-            deserializer = j -> {
-                Object[] params = new Object[keys.length];
-                for(int i=0; i<params.length; i++) {
-                    JsonElement jParam = j.get(keys[i]);
-                    if(jParam.isPresent())
-                        params[i] = jParam.as(paramTypes[i]);
-                    else if(defaults[i] != null)
-                        params[i] = defaults[i].get();
-                    else throw new MissingFieldException(paramTypes[i], "'" + keys[i] + "'");
-                }
-                try { return ctor.newInstance(params); }
+        try {
+            Constructor<?> ctor = cls.getDeclaredConstructor(/* paramType: */ JsonElement.class);
+            ctor.setAccessible(true);
+            deserializer = json -> {
+                try { return ctor.newInstance(json); }
                 catch(Exception e) { throw new RuntimeException(e); }
             };
+            DESERIALIZERS.put(cls, deserializer);
+            return deserializer;
+        } catch(NoSuchMethodException ignored) { }
+
+        if(isRecord(cls)) {
+            deserializer = getRecordDeserializer(cls);
+            DESERIALIZERS.put(cls, deserializer);
+            return deserializer;
         }
-        // Json array packaged
-        else if(packaging == Type.ARRAY || (packaging == Type.AUTO && props.indices().length != 0)) {
-            int[] indices;
-            if(props.indices().length == 0) {
-                // No indices specified -> use parameter indices
-                indices = new int[paramTypes.length];
-                Arrays.setAll(indices, IntUnaryOperator.identity());
-            }
-            else {
-                indices = props.indices();
-                if(indices.length != paramTypes.length)
-                    throw new IllegalJsonDeserializerException("The annotated constructor of " + type.getSimpleName() + " has the wrong number of parameters");
-            }
-            deserializer = j -> {
-                Object[] params = new Object[indices.length];
-                for(int i=0; i<params.length; i++) {
-                    JsonElement jParam = j.get(indices[i]);
-                    if(jParam.isPresent())
-                        params[i] = jParam.as(paramTypes[i]);
-                    else if(defaults[i] != null)
-                        params[i] = defaults[i].get();
-                    else throw new MissingFieldException(paramTypes[i], "[" + indices[i] + "]");
-                }
-                try { return ctor.newInstance(params); }
-                catch (Exception e) { throw new RuntimeException(e); }
-            };
+        if(!cls.isInterface() && !Modifier.isAbstract(cls.getModifiers())) {
+            deserializer = getUnsafeDeserializer(cls);
+            DESERIALIZERS.put(cls, deserializer);
+            return deserializer;
         }
-        // Not packaged
-        else {
-            if(paramTypes.length != 1)
-                throw new IllegalJsonDeserializerException("The annotated json of "+type.getSimpleName()+" constructor may have exactly one parameter");
-            Function<JsonElement,?> paramDeserializer = getDeserializer(paramTypes[0]); // Preload deserializer and throw exceptions now rather than during actual deserialization
-            deserializer = j -> {
-                Object param;
-                if(j.isEmpty())
-                    param = paramTypes[0].isArray() ? (T) Array.newInstance(paramTypes[0].getComponentType(), 0) : null;
-                else try {
-                    param = paramDeserializer.apply(j);
-                } catch(RuntimeException e) {
-                    throw new JsonDeserializationException(j, paramTypes[0], e);
-                }
-                try { return ctor.newInstance(param); }
-                catch(Exception e) { throw new RuntimeException(e); }
-            };
-        }
-        CONCRETE_SERIALIZERS.put(type, deserializer);
-        return deserializer;
+
+        throw new IllegalJsonDeserializerException("The type " + cls.getSimpleName() + " is not marked from json deserialization");
     }
 
-    private static <T> Function<JsonElement,T> getRecordDeserializer(Class<T> type) {
+    private static Function<JsonElement,?> getRecordDeserializer(Class<?> type) {
         Field[] fields = Arrays.stream(type.getDeclaredFields()).filter(f -> !Modifier.isStatic(f.getModifiers())).toArray(Field[]::new);
-        Class<?>[] types = new Class[fields.length];
-        for(int i=0; i<fields.length; i++)
-            types[i] = fields[i].getType();
+        Class<?>[] rawTypes = new Class[fields.length];
+        Type[] types = new Type[fields.length];
+        for(int i=0; i<fields.length; i++) {
+            rawTypes[i] = fields[i].getType();
+            types[i] = fields[i].getGenericType();
+        }
+
         try {
-            Constructor<T> ctor = type.getDeclaredConstructor(types);
+            Constructor<?> ctor = type.getDeclaredConstructor(rawTypes);
             ctor.setAccessible(true);
-            Supplier<?>[] defaults = getDefaults(ctor);
+            Function<JsonElement,?>[] defaults = getDefaults(ctor);
 
             if(types.length == 1) return json -> {
                 try {
@@ -594,7 +649,7 @@ final class JsonSerialization {
                         if(jParam.isPresent())
                             param = jParam.as(types[0]);
                         else if(defaults[0] != null)
-                            param = defaults[0].get();
+                            param = defaults[0].apply(json);
                         else throw new MissingFieldException(types[0], "'" + fields[0].getName() + "'");
                     } catch(RuntimeException e) {
                         // Try to deserialize as if serialized unpacked for backwards compatability
@@ -624,7 +679,7 @@ final class JsonSerialization {
                         if(jParam.isPresent())
                             args[i] = jParam.as(types[i]);
                         else if(defaults[i] != null)
-                            args[i] = defaults[i].get();
+                            args[i] = defaults[i].apply(json);
                         else throw new MissingFieldException(types[i], "'" + fields[i].getName() + "'");
                     }
                     return ctor.newInstance(args);
@@ -640,40 +695,44 @@ final class JsonSerialization {
     }
 
     @SuppressWarnings("unchecked")
-    private static <T> Function<JsonElement, T> getUnsafeDeserializer(Class<T> type) {
+    private static Function<JsonElement,?> getUnsafeDeserializer(Class<?> type) {
         Field[] fields = Arrays.stream(type.getDeclaredFields()).filter(f -> !Modifier.isStatic(f.getModifiers())).toArray(Field[]::new);
+        Type[] types = new Type[fields.length];
         BiConsumer<Object, Object>[] setters = new BiConsumer[fields.length];
-        for(int i=0; i<fields.length; i++)
+        for(int i=0; i<fields.length; i++) {
+            types[i] = fields[i].getGenericType();
             setters[i] = getUnsafeSetter(fields[i]);
-        Supplier<?>[] defaults = getDefaults(fields);
+        }
+        Function<JsonElement,?>[] defaults = getDefaults(fields);
 
         return json -> {
             try {
-                T t = (T) UNSAFE.allocateInstance(type);
+                Object obj = UNSAFE.allocateInstance(type);
                 for(int i=0; i<fields.length; i++) {
                     JsonElement jField = json.get(fields[i].getName());
                     Object val;
                     if(jField.isPresent())
-                        val = jField.as(fields[i].getType());
+                        val = jField.as(types[i]);
                     else if(defaults[i] != null)
-                        val = defaults[i].get();
+                        val = defaults[i].apply(json);
                     else throw new MissingFieldException(fields[i].getType(), "'"+fields[i].getName()+"'");
-                    setters[i].accept(t, val);
+                    setters[i].accept(obj, val);
                 }
-                return t;
+                return obj;
             } catch(InstantiationException e) {
                 throw new RuntimeException(e);
             }
         };
     }
 
-    private static Supplier<?>[] getDefaults(Constructor<?> ctor) {
-        Class<?>[] params = ctor.getParameterTypes();
+    @SuppressWarnings("unchecked")
+    private static Function<JsonElement,?>[] getDefaults(Constructor<?> ctor) {
+        Type[] params = ctor.getGenericParameterTypes();
         Annotation[][] annotations = ctor.getParameterAnnotations();
-        Supplier<?>[] defaults = new Supplier<?>[params.length];
+        Function<JsonElement,?>[] defaults = new Function[params.length];
 
         for(int i=0; i<params.length; i++) try {
-            Supplier<?> supplier = null;
+            Function<JsonElement,?> supplier = null;
             boolean required = false;
             for(Annotation a : annotations[i]) {
                 if(a instanceof Default)
@@ -684,7 +743,7 @@ final class JsonSerialization {
                 if(required)
                     throw new IllegalJsonDeserializerException(ctor+": parameter "+(i+1)+": Cannot be required and have a default value");
             }
-            else if(!required && !params[i].isPrimitive())
+            else if(!required && (!(params[i] instanceof Class) || !((Class<?>) params[i]).isPrimitive()))
                 supplier = NULL_SUPPLIER;
 
             defaults[i] = supplier;
@@ -695,15 +754,16 @@ final class JsonSerialization {
         return defaults;
     }
 
-    private static Supplier<?>[] getDefaults(Field[] fields) {
-        Supplier<?>[] defaults = new Supplier<?>[fields.length];
+    @SuppressWarnings("unchecked")
+    private static Function<JsonElement,?>[] getDefaults(Field[] fields) {
+        Function<JsonElement,?>[] defaults = new Function[fields.length];
 
         for(int i=0; i<fields.length; i++) try {
-            Supplier<?> supplier = null;
+            Function<JsonElement,?> supplier = null;
             boolean required = false;
             for(Annotation a : fields[i].getAnnotations()) {
                 if(a instanceof Default)
-                    supplier = parseDefault((Default) a, fields[i].getType());
+                    supplier = parseDefault((Default) a, fields[i].getGenericType());
                 else required |= a instanceof Required;
             }
             if(supplier != null) {
@@ -722,7 +782,7 @@ final class JsonSerialization {
     }
 
 
-    private static <E extends Enum<E>> Function<JsonElement,E> generateEnumDeserializer(Class<E> enumType) {
+    private static <E extends Enum<E>> Function<JsonElement, E> generateEnumDeserializer(Class<E> enumType) {
         return new Function<>() {
             final E[] values = enumType.getEnumConstants();
             @Override
@@ -784,65 +844,28 @@ final class JsonSerialization {
 
     private static boolean isRecord(Class<?> type) {
         // Cannot use type.isRecord() to be able to compile to lower class versions
-        return type.getSuperclass().getName().equals("java.lang.Record");
+        Class<?> superclass = type.getSuperclass();
+        return superclass != null && superclass.getName().equals("java.lang.Record");
     }
 
-//    private static Supplier<?> parseDefault(Default d, Class<?> type) {
-//        String value = d.value();
-//        if(type.isArray()) {
-//            Supplier<?>[] suppliers = new Supplier<?>[values.length];
-//            for(int i=0; i<values.length; i++)
-//                suppliers[i] = parseDefault(values[i], type.getComponentType(), d);
-//            return () -> {
-//                Object arr = Array.newInstance(type.getComponentType(), suppliers.length);
-//                for(int i=0; i<suppliers.length; i++)
-//                    Array.set(arr, i, suppliers[i].get());
-//                return arr;
-//            };
-//        }
-//        if(type == Collection.class || type == Set.class || type == List.class) {
-//            Class<?> contentType = getValueType(d);
-//            List<Supplier<?>> suppliers = new ArrayList<>();
-//            for(String value : values)
-//                suppliers.add(parseDefault(value, contentType, d));
-//            if(type == Set.class)
-//                return () -> suppliers.stream().map(Supplier::get).collect(Collectors.toSet());
-//            else return () -> suppliers.stream().map(Supplier::get).collect(Collectors.toList());
-//        }
-//        if(values.length != 1)
-//            throw new IllegalDefaultValueException("Parameter has non-array or collection type "+type.getSimpleName()+"; default value should not be array");
-//        return parseDefault(values[0], type, d);
-//    }
-
     @SuppressWarnings({"rawtypes", "unchecked"})
-    private static Supplier<?> parseDefault(Default d, Class<?> type) {
+    private static Function<JsonElement, ?> parseDefault(Default d, Type type) {
         String value = d.value();
-        if(type.isEnum()) {
-            Object val = !d.string() && value.startsWith("\"") ? Json.parse(value).as(type) : Enum.valueOf((Class) type, value);
-            return () -> val;
+        if(type instanceof Class<?> && ((Class<?>) type).isEnum()) {
+            Object val = !d.string() && value.startsWith("\"") ? Json.parse(value).as((Class<?>) type) : Enum.valueOf((Class) type, value);
+            return $ -> val;
         }
         if(type == String.class) {
             String str = d.string() ? value : Json.parse(value).asString();
-            return () -> str;
+            return $ -> str;
         }
 
         if(value.equals("null")) return NULL_SUPPLIER;
         JsonElement json = d.string() ? JsonElement.wrap(value) : Json.parse(value);
-        if(type == List.class || type == Collection.class)
-            return () -> json.asList(getValueType(d));
-        if(type == Set.class)
-            return () -> json.asSet(getValueType(d));
-        if(type == Map.class)
-            return () -> json.asMap(d.keyType(), getValueType(d));
-        return () -> json.as(type); // Also correct if type.isArray()
+        return contextJson -> json.withContextOf(contextJson).as(type);
     }
 
-    private static Class<?> getValueType(Default d) {
-        if(d.valueType() == void.class)
-            throw new IllegalDefaultValueException("The 'valueType' parameter is required for the default value of a Collection or Map");
-        return d.valueType();
-    }
-
+    @SuppressWarnings("deprecation")
     private static Function<Object,?> getUnsafeGetter(Field field) {
         long offset = UNSAFE.objectFieldOffset(field);
         boolean isVolatile = Modifier.isVolatile(field.getModifiers());
@@ -863,9 +886,11 @@ final class JsonSerialization {
             return isVolatile ? o -> UNSAFE.getDoubleVolatile(o, offset) : o -> UNSAFE.getDouble(o, offset);
         if(type.equals(char.class))
             return isVolatile ? o -> UNSAFE.getCharVolatile(o, offset) : o -> UNSAFE.getChar(o, offset);
-        else return isVolatile ? o -> UNSAFE.getObjectVolatile(o, offset) : o -> UNSAFE.getObject(o, offset);
+        else
+            return isVolatile ? o -> UNSAFE.getObjectVolatile(o, offset) : o -> UNSAFE.getObject(o, offset);
     }
 
+    @SuppressWarnings("deprecation")
     private static BiConsumer<Object,Object> getUnsafeSetter(Field field) {
         long offset = UNSAFE.objectFieldOffset(field);
         boolean isVolatile = Modifier.isVolatile(field.getModifiers());
@@ -886,6 +911,7 @@ final class JsonSerialization {
             return isVolatile ? (o,x) -> UNSAFE.putDoubleVolatile(o, offset, (double) x) : (o,x) -> UNSAFE.putDouble(o, offset, (double) x);
         if(type.equals(char.class))
             return isVolatile ? (o,x) -> UNSAFE.putCharVolatile(o, offset, (char) x) : (o,x) -> UNSAFE.putChar(o, offset, (char) x);
-        else return isVolatile ? (o,x) -> UNSAFE.putObjectVolatile(o, offset, x) : (o,x) -> UNSAFE.putObject(o, offset, x);
+        else
+            return isVolatile ? (o,x) -> UNSAFE.putObjectVolatile(o, offset, x) : (o,x) -> UNSAFE.putObject(o, offset, x);
     }
 }

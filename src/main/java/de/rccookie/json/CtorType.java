@@ -1,6 +1,6 @@
 package de.rccookie.json;
 
-public enum Type {
+public enum CtorType {
     OBJECT,
     ARRAY,
     DIRECT,

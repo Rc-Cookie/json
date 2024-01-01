@@ -1,5 +1,6 @@
 package de.rccookie.json;
 
+import java.lang.reflect.Type;
 import java.util.Objects;
 
 /**
@@ -52,7 +53,7 @@ public class JsonDeserializer {
      * @throws IllegalJsonDeserializerException If an exception occurs while loading the
      *                                          deserializer of the class to deserialize to
      */
-    protected <T> T deserialize(Class<T> type, JsonElement data) {
+    protected Object deserialize(Type type, JsonElement data) {
         return JsonSerialization.deserialize(type, data);
     }
 
@@ -222,7 +223,7 @@ public class JsonDeserializer {
         }
 
         @Override
-        protected <T> T deserialize(Class<T> type, JsonElement data) {
+        protected Object deserialize(Type type, JsonElement data) {
             try {
                 return deserializer.deserialize(type, data);
             } catch(Exception e) {

@@ -186,7 +186,7 @@ public final class Json {
      * @param file The file to parse from
      * @return The parsed json element
      * @throws JsonParseException If the string does not follow json syntax
-     * @throws UncheckedIOException If an {@link IOException} occurres while
+     * @throws UncheckedIOException If an {@link IOException} occurs while
      *                              reading the file
      */
     public static JsonElement load(String file) throws JsonParseException {
@@ -199,7 +199,7 @@ public final class Json {
      * @param file The file to parse from
      * @return The parsed json element
      * @throws JsonParseException If the string does not follow json syntax
-     * @throws UncheckedIOException If an {@link IOException} occurres while
+     * @throws UncheckedIOException If an {@link IOException} occurs while
      *                              reading the file
      */
     public static JsonElement load(File file) throws JsonParseException {
@@ -216,7 +216,7 @@ public final class Json {
      * @param file The file to parse from
      * @return The parsed json element
      * @throws JsonParseException If the string does not follow json syntax
-     * @throws UncheckedIOException If an {@link IOException} occurres while
+     * @throws UncheckedIOException If an {@link IOException} occurs while
      *                              reading the file
      */
     public static JsonElement load(Path file) throws JsonParseException {
@@ -246,7 +246,7 @@ public final class Json {
      *
      * @param file The file for the parser to parse
      * @return A JsonParser over the given string
-     * @throws UncheckedIOException If an {@link IOException} occurres while
+     * @throws UncheckedIOException If an {@link IOException} occurs while
      *                              opening the file
      */
     public static JsonParser getParser(File file) {
@@ -262,7 +262,7 @@ public final class Json {
      *
      * @param file The file for the parser to parse
      * @return A JsonParser over the given string
-     * @throws UncheckedIOException If an {@link IOException} occurres while
+     * @throws UncheckedIOException If an {@link IOException} occurs while
      *                              opening the file
      */
     public static JsonParser getParser(Path file) {
@@ -304,7 +304,7 @@ public final class Json {
      *
      * @param value The json element to store
      * @param file The file to store the structure in
-     * @throws UncheckedIOException If an {@link IOException} occurres
+     * @throws UncheckedIOException If an {@link IOException} occurs
      * @see #toString(Object)
      */
     public static void store(Object value, File file) {
@@ -320,7 +320,7 @@ public final class Json {
      * @param file The file to store the structure in
      * @param formatted Whether the output should be formatted with
      *                  newlines and indents
-     * @throws UncheckedIOException If an {@link IOException} occurres
+     * @throws UncheckedIOException If an {@link IOException} occurs
      * @see #toString(Object)
      */
     public static void store(Object value, File file, boolean formatted) {
@@ -339,7 +339,7 @@ public final class Json {
      *
      * @param value The json element to store
      * @param file The file to store the structure in
-     * @throws UncheckedIOException If an {@link IOException} occurres
+     * @throws UncheckedIOException If an {@link IOException} occurs
      * @see #toString(Object)
      */
     public static void store(Object value, Path file) {
@@ -355,7 +355,7 @@ public final class Json {
      * @param file The file to store the structure in
      * @param formatted Whether the output should be formatted with
      *                  newlines and indents
-     * @throws UncheckedIOException If an {@link IOException} occurres
+     * @throws UncheckedIOException If an {@link IOException} occurs
      * @see #toString(Object)
      */
     public static void store(Object value, Path file, boolean formatted) {
@@ -450,7 +450,7 @@ public final class Json {
      * Returns whether generated json strings are currently formatted if not
      * specified.
      *
-     * @return Whether to format josn strings if not specified
+     * @return Whether to format json strings if not specified
      */
     public static boolean isDefaultFormatted() {
         return DEFAULT_FORMATTED;
