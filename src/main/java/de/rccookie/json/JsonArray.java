@@ -387,6 +387,16 @@ public class JsonArray implements List<Object>, JsonStructure {
         return merge((JsonArray) otherStructure);
     }
 
+    @Override
+    public JsonArray filter(@Nullable Object filter, boolean allowMissing) {
+        if(!(filter instanceof JsonObject))
+            return this;
+        JsonArray filtered = new JsonArray();
+        for(Object o : this)
+            filtered.add(o instanceof JsonStructure ? ((JsonStructure) o).filter(filter, allowMissing) : o);
+        return filtered;
+    }
+
     /**
      * Returns a new json array with the given array merged recursively as follows:
      * <ul>
@@ -561,6 +571,28 @@ public class JsonArray implements List<Object>, JsonStructure {
      */
     public IterableIterator<JsonElement> elements() {
         Iterator<Object> it = stream().filter(Objects::nonNull).iterator();
+        return new IterableIterator<>() {
+            @Override
+            public boolean hasNext() {
+                return it.hasNext();
+            }
+
+            @Override
+            public JsonElement next() {
+                return JsonElement.wrap(it.next());
+            }
+        };
+    }
+
+
+    /**
+     * Returns an {@link IterableIterator} over all elements in this array, including
+     * <code>null</code> entries, each wrapped in a {@link JsonElement}.
+     *
+     * @return An IterableIterator over the non-null json elements of this array
+     */
+    public IterableIterator<JsonElement> nullableElements() {
+        Iterator<Object> it = data.iterator();
         return new IterableIterator<>() {
             @Override
             public boolean hasNext() {

@@ -2,8 +2,8 @@ package de.rccookie.json;
 
 import java.lang.reflect.Type;
 
-public class MissingFieldException extends RuntimeException {
+public class MissingFieldException extends JsonDeserializationException {
     public MissingFieldException(Type type, String name) {
-        throw new NullPointerException("Missing "+type.getTypeName()+" value "+name); // TODO: Resolve type parameter names
+        super("Missing "+typeString(type)+" value '"+name+"'"); // TODO: Resolve type parameter names
     }
 }

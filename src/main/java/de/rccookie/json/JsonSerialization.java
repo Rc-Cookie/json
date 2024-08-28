@@ -13,9 +13,14 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
 import java.lang.reflect.WildcardType;
+import java.net.Inet4Address;
+import java.net.Inet6Address;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
+import java.net.UnknownHostException;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
@@ -41,6 +46,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.LinkedList;
@@ -63,8 +69,12 @@ import java.util.Stack;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.Vector;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.jetbrains.annotations.NotNull;
 import sun.misc.Unsafe;
@@ -85,6 +95,8 @@ final class JsonSerialization {
         }
     }
 
+    private static final ThreadLocal<Deque<JsonSerializer>> CURRENT_SERIALIZER = ThreadLocal.withInitial(ArrayDeque::new);
+
     private static final Function<JsonSerializable,?> JSON_SERIALIZABLE_SERIALIZER = JsonSerializable::toJson;
     private static final Function<?,JsonArray> ARRAY_SERIALIZER = arr -> {
         JsonArray json = new JsonArray();
@@ -93,7 +105,6 @@ final class JsonSerialization {
             json.add(Array.get(arr, i)); // add() calls serialize() internally
         return json;
     };
-    private static final Function<Enum<?>,?> DEFAULT_ENUM_SERIALIZER = Enum::name;
 
 
     private static final Function<JsonElement,?> NULL_SUPPLIER = $ -> null;
@@ -148,8 +159,7 @@ final class JsonSerialization {
         registerSerializer(Map.Entry.class, e -> new JsonObject("key", e.getKey(), "value", e.getValue()));
         registerSerializer(Map.class, map -> {
             Map<Object, Object> serialized = new HashMap<>();
-            //noinspection unchecked
-            map.forEach((k,v) -> serialized.put(serialize(k), serialize(v)));
+            ((Map<?,?>) map).forEach((k,v) -> serialized.put(serialize(k), serialize(v)));
             if(serialized.keySet().stream().allMatch(String.class::isInstance))
                 return new JsonObject(serialized);
             return serialized.entrySet();
@@ -158,6 +168,7 @@ final class JsonSerialization {
         registerDeserializer(List.class, json -> json.asList(json.typeParameter()));
         registerDeserializer(ArrayList.class, json -> json.asCollection(ArrayList::new, json.typeParameter()));
         registerDeserializer(LinkedList.class, json -> json.asCollection(LinkedList::new, json.typeParameter()));
+        registerDeserializer(Vector.class, json -> json.asCollection(Vector::new, json.typeParameter()));
         registerDeserializer(Set.class, json -> json.asSet(json.typeParameter()));
         registerDeserializer(HashSet.class, json -> json.asCollection(HashSet::new, json.typeParameter()));
         registerDeserializer(LinkedHashSet.class, json -> json.asCollection(LinkedHashSet::new, json.typeParameter()));
@@ -210,13 +221,84 @@ final class JsonSerialization {
         });
         //noinspection unchecked
         registerSerializer(Optional.class, o -> o.orElse(null));
-        registerDeserializer(Optional.class, j -> Optional.ofNullable(j.as(j.currentType())));
+        registerDeserializer(Optional.class, j -> Optional.ofNullable(j.as(j.typeParameter())));
         registerSerializer(OptionalInt.class, o -> o.isPresent() ? o.getAsInt() : null);
         registerDeserializer(OptionalInt.class, j -> j.isPresent() ? OptionalInt.of(j.asInt()) : OptionalInt.empty());
         registerSerializer(OptionalLong.class, (OptionalLong o) -> o.isPresent() ? o.getAsLong() : null);
         registerDeserializer(OptionalLong.class, j -> j.isPresent() ? OptionalLong.of(j.asLong()) : OptionalLong.empty());
         registerSerializer(OptionalDouble.class, (OptionalDouble o) -> o.isPresent() ? o.getAsDouble() : null);
         registerDeserializer(OptionalDouble.class, j -> j.isPresent() ? OptionalDouble.of(j.asInt()) : OptionalDouble.empty());
+        registerSerializer(Stream.class, s -> {
+            JsonArray json = new JsonArray();
+            ((Stream<?>) s).forEach(json::add);
+            return json;
+        });
+        registerDeserializer(Stream.class, json -> {
+            Type contentType = json.typeParameter();
+            return json.stream().map(x -> x.as(contentType));
+        });
+        registerSerializer(Iterable.class, i -> {
+            JsonArray json = new JsonArray();
+            for(Object o : i)
+                json.add(o);
+            return json;
+        });
+        registerDeserializer(Iterable.class, json -> {
+            Type contentType = json.typeParameter();
+            return () -> new Iterator<>() {
+                final Iterator<JsonElement> it = json.iterator();
+                @Override
+                public boolean hasNext() {
+                    return it.hasNext();
+                }
+                @Override
+                public Object next() {
+                    return it.next().as(contentType);
+                }
+            };
+        });
+        registerSerializer(InetAddress.class, InetAddress::getHostAddress);
+        registerDeserializer(InetAddress.class, json -> {
+            try {
+                return InetAddress.getByName(json.asString());
+            } catch(UnknownHostException e) {
+                throw new RuntimeException(e);
+            }
+        });
+        registerDeserializer(Inet4Address.class, json -> {
+            InetAddress addr = json.as(InetAddress.class);
+            if(!(addr instanceof Inet4Address))
+                throw new IllegalArgumentException("Not a IPv4 address: "+json.asString());
+            return (Inet4Address) addr;
+        });
+        registerDeserializer(Inet6Address.class, json -> {
+            InetAddress addr = json.as(InetAddress.class);
+            if(!(addr instanceof Inet6Address))
+                throw new IllegalArgumentException("Not a IPv6 address: "+json.asString());
+            return (Inet6Address) addr;
+        });
+        registerSerializer(InetSocketAddress.class, addr -> new JsonObject("address", addr.getAddress(), "port", addr.getPort()));
+        registerDeserializer(InetSocketAddress.class, json -> new InetSocketAddress(json.get("address").as(InetAddress.class), json.getInt("port")));
+
+
+        try {
+            //noinspection unchecked
+            Class<? super LinkedHashMap<?,?>> sequencedMapCls = (Class<? super LinkedHashMap<?,?>>) Class.forName("java.util.SequencedMap");
+            //noinspection unchecked
+            Class<? super LinkedHashSet<?>> sequencedSetCls = (Class<? super LinkedHashSet<?>>) Class.forName("java.util.SequencedSet");
+            //noinspection unchecked
+            Class<? super List<?>> sequencedCollectionCls = (Class<? super List<?>>) Class.forName("java.util.SequencedCollection");
+
+            registerDeserializer(sequencedMapCls, json -> {
+                Type[] types = json.typeParameters();
+                return json.asCustomMap(LinkedHashMap::new, types[0], types[1]);
+            });
+            registerDeserializer(sequencedSetCls, json -> json.asCollection(LinkedHashSet::new, json.typeParameter()));
+            registerDeserializer(sequencedCollectionCls, json -> json.asList(json.typeParameter()));
+        } catch(ClassNotFoundException ignored) {
+            // < Java 21
+        }
+
 
         FIXED_SERIALIZERS.putAll(CONCRETE_SERIALIZERS);
         FIXED_SERIALIZERS.putAll(INTERFACE_SERIALIZERS);
@@ -386,8 +468,29 @@ final class JsonSerialization {
         DESERIALIZERS.put(type, deserializer);
     }
 
-    @SuppressWarnings("unchecked")
+    static <T> T usingSerializer(JsonSerializer serializer, Supplier<? extends T> code) {
+        CURRENT_SERIALIZER.get().push(Objects.requireNonNull(serializer, "serializer"));
+        try {
+            return code.get();
+        } finally {
+            CURRENT_SERIALIZER.get().pop();
+        }
+    }
+
     static Object serialize(Object obj) {
+        if(isJsonTypeInstance(obj) && !(obj instanceof JsonStructure))
+            return obj;
+
+        Deque<JsonSerializer> currentSerializer = CURRENT_SERIALIZER.get();
+        JsonSerializer serializer = currentSerializer.isEmpty() ? JsonSerializer.DEFAULT : currentSerializer.getFirst();
+        Object res = serializer.serialize(obj);
+        if(serializer == JsonSerializer.DEFAULT)
+            return res;
+        return usingSerializer(JsonSerializer.DEFAULT, () -> serialize(res));
+    }
+
+    @SuppressWarnings("unchecked")
+    static Object doSerialize(Object obj) {
         while(!isJsonTypeInstance(obj))
             obj = getSerializer(obj.getClass()).apply(obj);
         return obj;
@@ -414,10 +517,10 @@ final class JsonSerialization {
         data = data.pushCurrentType(type);
         try {
             return getDeserializer(type).apply(data);
-        } catch(IllegalJsonDeserializerException e) {
+        } catch(IllegalJsonDeserializerException | JsonDeserializationException e) {
             throw e;
         } catch(RuntimeException e) {
-            throw new JsonDeserializationException(data, type, e);
+            throw new GeneralJsonDeserializationException(data, type, e);
         } finally {
             data.popCurrentType();
         }
@@ -457,14 +560,22 @@ final class JsonSerialization {
             if(CONCRETE_SERIALIZERS.containsKey(superType))
                 return CONCRETE_SERIALIZERS.get(superType);
 
-        // Try to find serializer of implemented interface
-        for(Class<?> interfaceType : getImplementedInterfaces(type))
-            if(INTERFACE_SERIALIZERS.containsKey(interfaceType))
-                return INTERFACE_SERIALIZERS.get(interfaceType);
+        // Try to find serializer of implemented interface. If multiple implemented interfaces have,
+        // serializers registered, try to find the most specific interface
+        Class<?> supportedInterface = getImplementedInterfaces(type).stream()
+                .filter(INTERFACE_SERIALIZERS::containsKey)
+                .reduce((a,b) -> a.isAssignableFrom(b) ? b : a)
+                .orElse(null);
+        if(supportedInterface != null)
+            return INTERFACE_SERIALIZERS.get(supportedInterface);
 
         // Check for enum AFTER searching for custom serializer
-        if(type.isEnum())
-            return DEFAULT_ENUM_SERIALIZER;
+        if(Enum.class.isAssignableFrom(type)) {
+            while(!type.isEnum())
+                type = type.getSuperclass();
+            //noinspection rawtypes,unchecked
+            return generateEnumSerializer((Class) type);
+        }
 
         // Check for record also after searching for custom serializer
         if(isRecord(type))
@@ -476,23 +587,29 @@ final class JsonSerialization {
         throw new IllegalJsonTypeException(type);
     }
 
+    private static <E extends Enum<E>> Function<E,String> generateEnumSerializer(Class<E> type) {
+        EnumMap<E, String> names = new EnumMap<>(type);
+        for(E e : type.getEnumConstants())
+            names.put(e, jsonName(e, type));
+        return names::get;
+    }
+
     private static Function<?,?> generateRecordSerializer(Class<?> type) {
         try {
             List<BiConsumer<Object, JsonObject>> readers = new ArrayList<>();
             for(Field f : type.getDeclaredFields()) {
                 if(Modifier.isStatic(f.getModifiers())) continue;
 
-                String name = f.getName();
-                Method accessor = type.getMethod(name);
+                Method accessor = type.getMethod(f.getName());
                 accessor.setAccessible(true);
-                readers.add((obj,json) -> {try {
-                    json.put(name, serialize(accessor.invoke(obj)));
+                String jsonName = jsonName(f);
+
+                readers.add((obj,json) -> { try {
+                    json.put(jsonName, serialize(accessor.invoke(obj)));
                 } catch(IllegalAccessException e) {
                     throw new AssertionError(e);
                 } catch(InvocationTargetException e) {
-                    if(e.getTargetException() instanceof RuntimeException)
-                        throw (RuntimeException) e.getTargetException();
-                    throw new RuntimeException(e.getTargetException());
+                    throw rethrow(e);
                 }});
             }
             return obj -> {
@@ -510,13 +627,16 @@ final class JsonSerialization {
     private static Function<?,?> generateUnsafeSerializer(Class<?> type) {
         Field[] fields = Arrays.stream(type.getDeclaredFields()).filter(f -> !Modifier.isStatic(f.getModifiers())).toArray(Field[]::new);
         Function<Object,?>[] getters = new Function[fields.length];
-        for(int i=0; i<fields.length; i++)
+        String[] names = new String[fields.length];
+        for(int i=0; i<fields.length; i++) {
             getters[i] = getUnsafeGetter(fields[i]);
+            names[i] = jsonName(fields[i]);
+        }
 
         return obj -> {
             JsonObject json = new JsonObject();
             for(int i=0; i<getters.length; i++)
-                json.put(fields[i].getName(), serialize(getters[i].apply(obj)));
+                json.put(names[i], serialize(getters[i].apply(obj)));
             return json;
         };
     }
@@ -607,7 +727,7 @@ final class JsonSerialization {
             ctor.setAccessible(true);
             deserializer = json -> {
                 try { return ctor.newInstance(json); }
-                catch(Exception e) { throw new RuntimeException(e); }
+                catch(Exception e) { throw rethrow(e); }
             };
             DESERIALIZERS.put(cls, deserializer);
             return deserializer;
@@ -631,26 +751,26 @@ final class JsonSerialization {
         Field[] fields = Arrays.stream(type.getDeclaredFields()).filter(f -> !Modifier.isStatic(f.getModifiers())).toArray(Field[]::new);
         Class<?>[] rawTypes = new Class[fields.length];
         Type[] types = new Type[fields.length];
+        String[] names = new String[fields.length];
         for(int i=0; i<fields.length; i++) {
             rawTypes[i] = fields[i].getType();
             types[i] = fields[i].getGenericType();
+            names[i] = jsonName(fields[i]);
         }
 
         try {
             Constructor<?> ctor = type.getDeclaredConstructor(rawTypes);
             ctor.setAccessible(true);
-            Function<JsonElement,?>[] defaults = getDefaults(ctor);
+            Function<JsonElement,?>[] defaults = getRecordDefaults(fields, ctor);
 
             if(types.length == 1) return json -> {
                 try {
                     Object param;
                     try {
-                        JsonElement jParam = json.get(fields[0].getName());
+                        JsonElement jParam = json.get(names[0]);
                         if(jParam.isPresent())
                             param = jParam.as(types[0]);
-                        else if(defaults[0] != null)
-                            param = defaults[0].apply(json);
-                        else throw new MissingFieldException(types[0], "'" + fields[0].getName() + "'");
+                        else param = defaults[0].apply(json);
                     } catch(RuntimeException e) {
                         // Try to deserialize as if serialized unpacked for backwards compatability
                         try {
@@ -665,7 +785,7 @@ final class JsonSerialization {
                     }
                     return ctor.newInstance(param);
                 } catch(InvocationTargetException e) {
-                    throw new RuntimeException(e);
+                    throw rethrow(e);
                 } catch(InstantiationException | IllegalAccessException e) {
                     throw new AssertionError(e); // Access: Should have failed during setAccessible()
                 }
@@ -675,16 +795,14 @@ final class JsonSerialization {
                 try {
                     Object[] args = new Object[types.length];
                     for(int i=0; i<args.length; i++) {
-                        JsonElement jParam = json.get(fields[i].getName());
+                        JsonElement jParam = json.get(names[i]);
                         if(jParam.isPresent())
                             args[i] = jParam.as(types[i]);
-                        else if(defaults[i] != null)
-                            args[i] = defaults[i].apply(json);
-                        else throw new MissingFieldException(types[i], "'" + fields[i].getName() + "'");
+                        else args[i] = defaults[i].apply(json);
                     }
                     return ctor.newInstance(args);
                 } catch(InvocationTargetException e) {
-                    throw new RuntimeException(e);
+                    throw rethrow(e);
                 } catch(InstantiationException | IllegalAccessException e) {
                     throw new AssertionError(e); // Access: Should have failed during setAccessible()
                 }
@@ -699,9 +817,11 @@ final class JsonSerialization {
         Field[] fields = Arrays.stream(type.getDeclaredFields()).filter(f -> !Modifier.isStatic(f.getModifiers())).toArray(Field[]::new);
         Type[] types = new Type[fields.length];
         BiConsumer<Object, Object>[] setters = new BiConsumer[fields.length];
+        String[] names = new String[fields.length];
         for(int i=0; i<fields.length; i++) {
             types[i] = fields[i].getGenericType();
             setters[i] = getUnsafeSetter(fields[i]);
+            names[i] = jsonName(fields[i]);
         }
         Function<JsonElement,?>[] defaults = getDefaults(fields);
 
@@ -709,13 +829,11 @@ final class JsonSerialization {
             try {
                 Object obj = UNSAFE.allocateInstance(type);
                 for(int i=0; i<fields.length; i++) {
-                    JsonElement jField = json.get(fields[i].getName());
+                    JsonElement jField = json.get(names[i]);
                     Object val;
                     if(jField.isPresent())
                         val = jField.as(types[i]);
-                    else if(defaults[i] != null)
-                        val = defaults[i].apply(json);
-                    else throw new MissingFieldException(fields[i].getType(), "'"+fields[i].getName()+"'");
+                    else val = defaults[i].apply(json);
                     setters[i].accept(obj, val);
                 }
                 return obj;
@@ -726,70 +844,97 @@ final class JsonSerialization {
     }
 
     @SuppressWarnings("unchecked")
-    private static Function<JsonElement,?>[] getDefaults(Constructor<?> ctor) {
-        Type[] params = ctor.getGenericParameterTypes();
+    private static Function<JsonElement,?> [] getRecordDefaults(Field[] fields, Constructor<?> ctor) {
+        Function<JsonElement,?>[] defaults = new Function[fields.length];
         Annotation[][] annotations = ctor.getParameterAnnotations();
-        Function<JsonElement,?>[] defaults = new Function[params.length];
-
-        for(int i=0; i<params.length; i++) try {
-            Function<JsonElement,?> supplier = null;
-            boolean required = false;
-            for(Annotation a : annotations[i]) {
-                if(a instanceof Default)
-                    supplier = parseDefault((Default) a, params[i]);
-                else required |= a instanceof Required;
-            }
-            if(supplier != null) {
-                if(required)
-                    throw new IllegalJsonDeserializerException(ctor+": parameter "+(i+1)+": Cannot be required and have a default value");
-            }
-            else if(!required && (!(params[i] instanceof Class) || !((Class<?>) params[i]).isPrimitive()))
-                supplier = NULL_SUPPLIER;
-
-            defaults[i] = supplier;
-        } catch(IllegalDefaultValueException e) {
-            throw new IllegalDefaultValueException(ctor+": parameter "+(i+1)+": "+e.getMessage(), e);
-        }
-
+        for(int i=0; i<defaults.length; i++)
+            defaults[i] = getDefault(annotations[i], fields[i].getType(), fields[i].getGenericType(), jsonName(fields[i]), fields[i].getDeclaringClass() + "." + fields[i].getName());
         return defaults;
     }
 
     @SuppressWarnings("unchecked")
-    private static Function<JsonElement,?>[] getDefaults(Field[] fields) {
-        Function<JsonElement,?>[] defaults = new Function[fields.length];
+    private static Function<JsonElement,?> [] getDefaults(Field[] fields) {
+        return Arrays.stream(fields)
+                .map(f -> getDefault(f.getAnnotations(), f.getType(), f.getGenericType(), jsonName(f), f.getDeclaringClass()+"."+f.getName()))
+                .toArray(Function[]::new);
+    }
 
-        for(int i=0; i<fields.length; i++) try {
+    private static Function<JsonElement,?> getDefault(Annotation[] annotations, Class<?> rawType, Type genericType, String jsonFieldName, String name) {
+        try {
             Function<JsonElement,?> supplier = null;
             boolean required = false;
-            for(Annotation a : fields[i].getAnnotations()) {
+            boolean noDefault = false;
+            for(Annotation a : annotations) {
                 if(a instanceof Default)
-                    supplier = parseDefault((Default) a, fields[i].getGenericType());
-                else required |= a instanceof Required;
+                    supplier = parseDefault(name, (Default) a, genericType);
+                else {
+                    required |= a instanceof Required || a instanceof NotNull;
+                    noDefault |= a instanceof Required;
+                }
             }
             if(supplier != null) {
-                if(required)
-                    throw new IllegalJsonDeserializerException(fields[i]+": Cannot be required and have a default value");
+                if(noDefault)
+                    throw new IllegalJsonDeserializerException(name+": Cannot be required and have a default value");
+                return supplier;
             }
-            else if(!required && !fields[i].getType().isPrimitive())
-                supplier = NULL_SUPPLIER;
-
-            defaults[i] = supplier;
+            if(!required && !rawType.isPrimitive())
+                return NULL_SUPPLIER;
+            return json -> { throw new MissingFieldException(genericType, Json.appendToPath(json.path(), jsonFieldName)); };
         } catch(IllegalDefaultValueException e) {
-            throw new IllegalDefaultValueException(fields[i]+": "+e.getMessage(), e);
+            throw new IllegalDefaultValueException(name+": "+e.getMessage(), e);
         }
-
-        return defaults;
     }
 
 
     private static <E extends Enum<E>> Function<JsonElement, E> generateEnumDeserializer(Class<E> enumType) {
         return new Function<>() {
             final E[] values = enumType.getEnumConstants();
+            final Map<String, E> constantsByName = new HashMap<>();
+            final Map<String, E> constantsByLowerName = new HashMap<>();
+            final Map<String, List<E>> ambiguousLowerNames = new HashMap<>();
+            {
+                for(E e : enumType.getEnumConstants()) {
+                    String name = jsonName(e, enumType);
+                    constantsByName.put(name, e);
+                    String lower = name.toLowerCase();
+                    if(ambiguousLowerNames.containsKey(lower)) {
+                        ambiguousLowerNames.get(lower).add(e);
+                        constantsByLowerName.remove(lower);
+                    }
+                    else {
+                        List<E> ambiguous = new ArrayList<>();
+                        ambiguous.add(e);
+                        ambiguousLowerNames.put(lower, ambiguous);
+                        if(constantsByLowerName.put(lower, e) != null)
+                            constantsByLowerName.remove(lower);
+                    }
+                }
+                ambiguousLowerNames.values().removeIf(ns -> ns.size() <= 1);
+            }
+
             @Override
             public E apply(JsonElement json) {
-                if(json.isInteger())
+                if(json.isInteger()) {
+                    int index = json.asInt();
+                    if(index < 0 || index >= values.length)
+                        throw new IllegalEnumConstantException("Index "+index+" in '"+json.path()+"' out of bounds for allowed "+enumType.getSimpleName()+" constants");
                     return values[json.asInt()];
-                return Enum.valueOf(enumType, json.asString());
+                }
+                String name = json.asString();
+                E e = constantsByName.get(name);
+                if(e != null) return e;
+
+                String lower = name.toLowerCase();
+                e = constantsByLowerName.get(lower);
+                if(e != null) return e;
+
+                if(ambiguousLowerNames.containsKey(lower))
+                    throw new IllegalEnumConstantException("'"+name+"' is ambiguous between "+enumType.getSimpleName()+" constants "+join(ambiguousLowerNames.get(lower))+" for '"+json.path()+"'");
+                throw new IllegalEnumConstantException("'"+name+"' is an invalid "+enumType.getSimpleName()+" for '"+json.path()+"', allowed values are "+join(Arrays.asList(values)));
+            }
+
+            private String join(List<E> list) {
+                return list.subList(0, list.size() - 1).stream().map(e -> "'"+e.name()+"'").collect(Collectors.joining(", ")) + " and '" + list.get(list.size() - 1)+"'";
             }
         };
     }
@@ -849,10 +994,10 @@ final class JsonSerialization {
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
-    private static Function<JsonElement, ?> parseDefault(Default d, Type type) {
+    private static Function<JsonElement,?> parseDefault(String context, Default d, Type type) {
         String value = d.value();
         if(type instanceof Class<?> && ((Class<?>) type).isEnum()) {
-            Object val = !d.string() && value.startsWith("\"") ? Json.parse(value).as((Class<?>) type) : Enum.valueOf((Class) type, value);
+            Object val = !d.string() && value.startsWith("\"") ? Json.parse(value).as(type) : Enum.valueOf((Class) type, value);
             return $ -> val;
         }
         if(type == String.class) {
@@ -860,12 +1005,34 @@ final class JsonSerialization {
             return $ -> str;
         }
 
-        if(value.equals("null")) return NULL_SUPPLIER;
-        JsonElement json = d.string() ? JsonElement.wrap(value) : Json.parse(value);
-        return contextJson -> json.withContextOf(contextJson).as(type);
+        if(!d.string() && value.equals("null")) return NULL_SUPPLIER;
+        try {
+            JsonElement json = d.string() ? JsonElement.wrap(value) : Json.parse(value);
+            return contextJson -> {
+                try {
+                    return json.withContextOf(contextJson).as(type);
+                } catch(Exception e) {
+                    throw new IllegalJsonDeserializerException(context+": failed to deserialize default value", e);
+                }
+            };
+        } catch(JsonParseException e) {
+            throw new IllegalJsonDeserializerException(context+": default value is not proper json: "+e.getMessage(), e);
+        }
     }
 
-    @SuppressWarnings("deprecation")
+    private static String jsonName(Field field) {
+        JsonName nameAnnotation = field.getAnnotation(JsonName.class);
+        return nameAnnotation != null ? nameAnnotation.value() : field.getName();
+    }
+
+    private static <E extends Enum<E>> String jsonName(E enumInstance, Class<E> enumType) {
+        try {
+            return jsonName(enumType.getDeclaredField(enumInstance.name()));
+        } catch(NoSuchFieldException e) {
+            throw new AssertionError(e);
+        }
+    }
+
     private static Function<Object,?> getUnsafeGetter(Field field) {
         long offset = UNSAFE.objectFieldOffset(field);
         boolean isVolatile = Modifier.isVolatile(field.getModifiers());
@@ -890,7 +1057,6 @@ final class JsonSerialization {
             return isVolatile ? o -> UNSAFE.getObjectVolatile(o, offset) : o -> UNSAFE.getObject(o, offset);
     }
 
-    @SuppressWarnings("deprecation")
     private static BiConsumer<Object,Object> getUnsafeSetter(Field field) {
         long offset = UNSAFE.objectFieldOffset(field);
         boolean isVolatile = Modifier.isVolatile(field.getModifiers());
@@ -913,5 +1079,15 @@ final class JsonSerialization {
             return isVolatile ? (o,x) -> UNSAFE.putCharVolatile(o, offset, (char) x) : (o,x) -> UNSAFE.putChar(o, offset, (char) x);
         else
             return isVolatile ? (o,x) -> UNSAFE.putObjectVolatile(o, offset, x) : (o,x) -> UNSAFE.putObject(o, offset, x);
+    }
+
+    private static RuntimeException rethrow(Throwable e) {
+        while(e instanceof InvocationTargetException)
+            e = e.getCause();
+        if(e instanceof RuntimeException)
+            return (RuntimeException) e;
+        if(e instanceof Error)
+            throw (Error) e;
+        return new RuntimeException(e);
     }
 }

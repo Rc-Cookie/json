@@ -20,9 +20,9 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import de.rccookie.util.IterableIterator;
@@ -45,15 +45,17 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
     /**
      * A json element with no value, i.e. null.
      */
-    public static final JsonElement EMPTY = new JsonElement(null, JsonDeserializer.DEFAULT, null);
+    public static final JsonElement EMPTY = new JsonElement(null, JsonDeserializer.DEFAULT, "", null);
 
     private final Object value;
     private final JsonDeserializer deserializer;
+    private final String path;
     private final GenericContext context;
 
-    private JsonElement(Object value, JsonDeserializer deserializer, GenericContext context) {
+    private JsonElement(Object value, JsonDeserializer deserializer, String path, GenericContext context) {
         this.value = value;
         this.deserializer = Objects.requireNonNull(deserializer, "deserializer");
+        this.path = Objects.requireNonNull(path, "path");
         this.context = context;
     }
 
@@ -66,7 +68,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
     JsonElement pushGenericContext(TypeVariable<?>[] typeVariables, Type[] actualTypes) {
         if(typeVariables.length == 0) return this;
         if(context == null)
-            return of(value, deserializer, new GenericContext()).pushGenericContext(typeVariables, actualTypes);
+            return of(value, deserializer, path, new GenericContext()).pushGenericContext(typeVariables, actualTypes);
         context.pushAllTypeValues(typeVariables, actualTypes);
         return this;
     }
@@ -80,7 +82,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
 
     JsonElement pushCurrentType(Type type) {
         if(context == null)
-            return of(value, deserializer, new GenericContext()).pushCurrentType(type);
+            return of(value, deserializer, path, new GenericContext()).pushCurrentType(type);
         context.pushCurrentType(type);
         return this;
     }
@@ -98,8 +100,8 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
         return context.currentType();
     }
 
-    JsonElement withContextOf(JsonElement contextJson) {
-        return context == contextJson.context ? this : of(value, deserializer, contextJson.context);
+    public JsonElement withContextOf(JsonElement contextJson) {
+        return context == contextJson.context ? this : of(value, deserializer, path, contextJson.context);
     }
 
     Type getActualType(TypeVariable<?> typeVariable) {
@@ -193,6 +195,16 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
 
 
     /**
+     * Returns the path that was requested to receive this json element.
+     *
+     * @return The path of this json element
+     */
+    public String path() {
+        return path;
+    }
+
+
+    /**
      * Returns the deserializer used by this json element to deserialize values.
      *
      * @return The deserializer used
@@ -214,7 +226,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
     public JsonElement withDeserializer(JsonDeserializer deserializer) {
         if(this.deserializer == deserializer)
             return this;
-        return of(value, deserializer, context);
+        return of(value, deserializer, path, context);
     }
 
     /**
@@ -239,7 +251,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * @return The value of the json element
      */
     public Object get() {
-        return value;
+        return deserializer.get(this, value);
     }
 
     /**
@@ -255,6 +267,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * <code>or(type, null)</code> instead.
      *
      * @param type The type to deserialize the value to
+     * @throws JsonDeserializationException If this json element could not be deserialized to the given type
      */
     public <T> T as(Class<T> type) {
         return type.cast(as((Type) type));
@@ -272,51 +285,67 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * If you want <code>null</code> as the default value for an array type, use
      * <code>or(type, null)</code> instead.
      *
-     * @param type The type to deserialize the value to
+     * @param rawType The type to deserialize the value to
      * @param typeParameters Generic type parameters of the given (raw) type
+     * @throws JsonDeserializationException If this json element could not be deserialized to the given type
      */
     @SuppressWarnings("unchecked")
-    public <T> T as(Class<? super T> type, Type... typeParameters) {
-        return (T) type.cast(as(type(type, typeParameters)));
+    public <T> T as(Class<? super T> rawType, Type... typeParameters) {
+        return (T) rawType.cast(as(type(rawType, typeParameters)));
     }
 
     private static Type type(Class<?> rawType, Type... typeParameters) {
-        return typeParameters.length != 0 ? TypeBuilder.type(rawType, typeParameters) : rawType;
+        return typeParameters.length != 0 ? TypeBuilder.generic(Objects.requireNonNull(rawType, "rawType"), Objects.requireNonNull(typeParameters, "typeParameters")) : rawType;
     }
 
+    /**
+     * Returns the elements value as an instance of the given type using the
+     * annotated constructor or the deserializer registered using
+     * {@link Json#registerDeserializer(Class, Function)} (see there for more info).
+     * If no value is present,
+     * <ul>
+     *     <li>an empty array will be returned if the target type is an array type,</li>
+     *     <li>otherwise <code>null</code> will be returned.</li>
+     * </ul>
+     * If you want <code>null</code> as the default value for an array type, use
+     * <code>or(type, null)</code> instead.
+     *
+     * @param type The type to deserialize the value to
+     * @throws JsonDeserializationException If this json element could not be deserialized to the given type
+     */
     @SuppressWarnings("unchecked")
     public <T> T as(Type type) {
-        return (T) deserializer.deserialize(type, this);
+        return (T) deserializer.deserialize(Objects.requireNonNull(type, "type"), this, value);
     }
 
     /**
      * Returns the elements value as {@link JsonStructure}.
      *
      * @return The value of the json element as json structure
-     * @throws ClassCastException If a value is present and is not convertible to a json structure
+     * @throws TypeMismatchException If a value is present and is not convertible to a json structure
      */
     public JsonStructure asStructure() {
-        return deserializer.asStructure(value);
+        return deserializer.asStructure(this, value);
     }
 
     /**
      * Returns the elements value as {@link JsonObject}.
      *
      * @return The value of the json element as json object
-     * @throws ClassCastException If a value is present and is not convertible to a json object
+     * @throws TypeMismatchException If a value is present and is not convertible to a json object
      */
     public JsonObject asObject() {
-        return deserializer.asObject(value);
+        return deserializer.asObject(this, value);
     }
 
     /**
      * Returns the elements value as {@link JsonArray}.
      *
      * @return The value of the json element as json array
-     * @throws ClassCastException If al value is present and is not a json array
+     * @throws TypeMismatchException If al value is present and is not a json array
      */
     public JsonArray asArray() {
-        return deserializer.asArray(value);
+        return deserializer.asArray(this, value);
     }
 
     /**
@@ -325,7 +354,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param contentType The type to deserialize the elements to
      * @return The json array deserialized to an array, or an empty array
-     * @throws ClassCastException If a value is present and is not convertible to a json array
+     * @throws TypeMismatchException If a value is present and is not convertible to a json array
      */
     @NotNull
     public <T> T[] asArray(Class<T> contentType) {
@@ -338,12 +367,12 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param contentType The type to deserialize the elements to
      * @return The json array deserialized to an array, or an empty array
-     * @throws ClassCastException If a value is present and is not convertible to a json array
+     * @throws TypeMismatchException If a value is present and is not convertible to a json array
      */
     @SuppressWarnings({"unchecked", "RedundantCast"})
     @NotNull
     public <T> T[] asArray(Class<? super T> contentType, Type... typeParameters) {
-        return (T[]) as(contentType, type(contentType, typeParameters));
+        return (T[]) as(contentType, type(Objects.requireNonNull(contentType, "contentType"), Objects.requireNonNull(typeParameters, "typeParameters")));
     }
 
     /**
@@ -352,12 +381,12 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param contentType The type to deserialize the elements to
      * @return The json array deserialized to an array, or an empty array
-     * @throws ClassCastException If a value is present and is not convertible to a json array
+     * @throws TypeMismatchException If a value is present and is not convertible to a json array
      */
     @SuppressWarnings({"unchecked", "RedundantCast"})
     @NotNull
     public <T> T[] asArray(Type contentType) {
-        return (T[]) as(resolveRawType(contentType), contentType);
+        return (T[]) as(resolveRawType(Objects.requireNonNull(contentType, "contentType")), contentType);
     }
 
     @SuppressWarnings("unchecked")
@@ -365,10 +394,9 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
     private <T> T[] asArray0(Class<? super T> contentType, Type genericContentType) {
         if(value == null)
             return (T[]) Array.newInstance(contentType, 0);
-        JsonArray array = (JsonArray) value;
-        T[] arr = (T[]) Array.newInstance(contentType, array.size());
-        for(int i=0; i<array.size(); i++)
-            arr[i] = array.getElement(i).withDeserializer(deserializer).as(genericContentType);
+        T[] arr = (T[]) Array.newInstance(contentType, size());
+        for(int i=0; i<arr.length; i++)
+            arr[i] = get(i).as(genericContentType);
         return arr;
     }
 
@@ -378,7 +406,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param contentType The type to deserialize the elements to
      * @return The json array deserialized to a list, or an empty list
-     * @throws ClassCastException If a value is present and is not convertible to a json array
+     * @throws TypeMismatchException If a value is present and is not convertible to a json array
      */
     @NotNull
     public <T> List<T> asList(Class<T> contentType) {
@@ -391,7 +419,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param contentType The type to deserialize the elements to
      * @return The json array deserialized to a list, or an empty list
-     * @throws ClassCastException If a value is present and is not convertible to a json array
+     * @throws TypeMismatchException If a value is present and is not convertible to a json array
      */
     @NotNull
     public <T> List<T> asList(Class<? super T> contentType, Type... typeParameters) {
@@ -404,11 +432,11 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param contentType The type to deserialize the elements to
      * @return The json array deserialized to a list, or an empty list
-     * @throws ClassCastException If a value is present and is not convertible to a json array
+     * @throws TypeMismatchException If a value is present and is not convertible to a json array
      */
     @NotNull
     public <T> List<T> asList(Type contentType) {
-        return asCollection(ArrayList::new, contentType);
+        return asCollection(ArrayList::new, Objects.requireNonNull(contentType, "contentType"));
     }
 
     /**
@@ -417,7 +445,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param contentType The type to deserialize the elements to
      * @return The json array deserialized to a set, or an empty set
-     * @throws ClassCastException If a value is present and is not convertible to a json array
+     * @throws TypeMismatchException If a value is present and is not convertible to a json array
      */
     @NotNull
     public <T> Set<T> asSet(Class<T> contentType) {
@@ -430,7 +458,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param contentType The type to deserialize the elements to
      * @return The json array deserialized to a set, or an empty set
-     * @throws ClassCastException If a value is present and is not convertible to a json array
+     * @throws TypeMismatchException If a value is present and is not convertible to a json array
      */
     @NotNull
     public <T> Set<T> asSet(Class<? super T> contentType, Type... typeParameters) {
@@ -443,11 +471,11 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param contentType The type to deserialize the elements to
      * @return The json array deserialized to a set, or an empty set
-     * @throws ClassCastException If a value is present and is not convertible to a json array
+     * @throws TypeMismatchException If a value is present and is not convertible to a json array
      */
     @NotNull
     public <T> Set<T> asSet(Type contentType) {
-        return asCollection(HashSet::new, contentType);
+        return asCollection(HashSet::new, Objects.requireNonNull(contentType, "contentType"));
     }
 
     /**
@@ -457,7 +485,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * @param collectionCtor A constructor for the type of collection that should be returned
      * @param contentType    The type to deserialize the elements to
      * @return The json array deserialized to the specified collection type, or an empty collection of that type
-     * @throws ClassCastException If a value is present and is not convertible to a json array
+     * @throws TypeMismatchException If a value is present and is not convertible to a json array
      */
     @NotNull
     public <T, C extends Collection<? super T>> C asCollection(Supplier<C> collectionCtor, Class<T> contentType) {
@@ -471,7 +499,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * @param collectionCtor A constructor for the type of collection that should be returned
      * @param contentType    The type to deserialize the elements to
      * @return The json array deserialized to the specified collection type, or an empty collection of that type
-     * @throws ClassCastException If a value is present and is not convertible to a json array
+     * @throws TypeMismatchException If a value is present and is not convertible to a json array
      */
     @NotNull
     public <T, C extends Collection<? super T>> C asCollection(Supplier<C> collectionCtor, Class<? super T> contentType, Type... typeParameters) {
@@ -485,16 +513,12 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * @param collectionCtor A constructor for the type of collection that should be returned
      * @param contentType    The type to deserialize the elements to
      * @return The json array deserialized to the specified collection type, or an empty collection of that type
-     * @throws ClassCastException If a value is present and is not convertible to a json array
+     * @throws TypeMismatchException If a value is present and is not convertible to a json array
      */
     @NotNull
     public <T, C extends Collection<? super T>> C asCollection(Supplier<C> collectionCtor, Type contentType) {
         C col = Objects.requireNonNull(collectionCtor, "collectionCtor").get();
-        if(value == null) return col;
-
-        JsonArray array = (JsonArray) value;
-        for(int i=0; i<array.size(); i++)
-            col.add(array.getElement(i).withDeserializer(deserializer).as(contentType));
+        forEachNullable(e -> col.add(e.as(contentType)));
         return col;
     }
 
@@ -506,7 +530,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param valueType The type to deserialize the values to (the keys are strings)
      * @return The json object deserialized to a map, or an empty map
-     * @throws ClassCastException If a value is present and is not convertible to a json object
+     * @throws TypeMismatchException If a value is present and is not convertible to a json object
      */
     @NotNull
     public <T> Map<String, T> asMap(Class<T> valueType) {
@@ -521,7 +545,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param valueType The type to deserialize the values to (the keys are strings)
      * @return The json object deserialized to a map, or an empty map
-     * @throws ClassCastException If a value is present and is not convertible to a json object
+     * @throws TypeMismatchException If a value is present and is not convertible to a json object
      */
     @NotNull
     public <T> Map<String, T> asMap(Type valueType) {
@@ -537,7 +561,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * @param mapCtor   A constructor for the type of map that should be returned
      * @param valueType The type to deserialize the values to (the keys are strings)
      * @return The json object deserialized to a map, or an empty map
-     * @throws ClassCastException If a value is present and is not convertible to a json object
+     * @throws TypeMismatchException If a value is present and is not convertible to a json object
      */
     @NotNull
     public <T, M extends Map<? super String, ? super T>> M asCustomMap(Supplier<M> mapCtor, Class<T> valueType) {
@@ -553,14 +577,12 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * @param mapCtor   A constructor for the type of map that should be returned
      * @param valueType The type to deserialize the values to (the keys are strings)
      * @return The json object deserialized to a map, or an empty map
-     * @throws ClassCastException If a value is present and is not convertible to a json object
+     * @throws TypeMismatchException If a value is present and is not convertible to a json object
      */
     @NotNull
     public <T, M extends Map<? super String, ? super T>> M asCustomMap(Supplier<M> mapCtor, Type valueType) {
         M map = mapCtor.get();
-        if(value == null) return map;
-        JsonObject obj = (JsonObject) value;
-        obj.forEach((k,v) -> map.put(k, wrap(v, deserializer).as(valueType)));
+        forEachNullable((k,v) -> map.put(k, v.as(valueType)));
         return map;
     }
 
@@ -578,7 +600,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * @param keyType The type to deserialize keys to
      * @param valueType The type to deserialize values to
      * @return The deserialized map, or an empty map
-     * @throws ClassCastException If a value is present and is not convertible to a json object or array
+     * @throws TypeMismatchException If a value is present and is not convertible to a json object or array
      */
     public <K,V> Map<K,V> asMap(Class<K> keyType, Class<V> valueType) {
         return asCustomMap(HashMap::new, keyType, valueType);
@@ -598,7 +620,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * @param keyType The type to deserialize keys to
      * @param valueType The type to deserialize values to
      * @return The deserialized map, or an empty map
-     * @throws ClassCastException If a value is present and is not convertible to a json object or array
+     * @throws TypeMismatchException If a value is present and is not convertible to a json object or array
      */
     public <K,V> Map<K,V> asMap(Type keyType, Type valueType) {
         return asCustomMap(HashMap::new, keyType, valueType);
@@ -619,7 +641,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * @param keyType   The type to deserialize keys to
      * @param valueType The type to deserialize values to
      * @return The deserialized map, or an empty map
-     * @throws ClassCastException If a value is present and is not convertible to a json object or array
+     * @throws TypeMismatchException If a value is present and is not convertible to a json object or array
      */
     public <K,V, M extends Map<? super K, ? super V>> M asCustomMap(Supplier<M> mapCtor, Class<K> keyType, Class<V> valueType) {
         return asCustomMap(mapCtor, (Type) keyType, valueType);
@@ -640,13 +662,13 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * @param keyType   The type to deserialize keys to
      * @param valueType The type to deserialize values to
      * @return The deserialized map, or an empty map
-     * @throws ClassCastException If a value is present and is not convertible to a json object or array
+     * @throws TypeMismatchException If a value is present and is not convertible to a json object or array
      */
     public <K,V, M extends Map<? super K, ? super V>> M asCustomMap(Supplier<M> mapCtor, Type keyType, Type valueType) {
         M map = mapCtor.get();
         if(value == null) return map;
-        if(value instanceof JsonObject)
-            forEach((k, v) -> map.put(wrap(k, deserializer).as(keyType), v.as(valueType)));
+        if(isObject())
+            forEach((k,v) -> map.put(of(k, v.deserializer, path+"[key]", context).as(keyType), v.as(valueType)));
         else for(JsonElement entry : this) {
             if(entry.isArray())
                 map.put(entry.get(0).as(keyType), entry.get(1).as(valueType));
@@ -659,20 +681,20 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * Returns the elements value as {@link String}.
      *
      * @return The value of the json element as string
-     * @throws ClassCastException If a value is present and is not convertible to a string
+     * @throws TypeMismatchException If a value is present and is not convertible to a string
      */
     public String asString() {
-        return deserializer.asString(value);
+        return deserializer.asString(this, value);
     }
 
     /**
      * Returns the elements value as a number.
      *
      * @return The value of the json element as number
-     * @throws ClassCastException If a value is present and is not convertible to a number
+     * @throws TypeMismatchException If a value is present and is not convertible to a number
      */
     public Number asNumber() {
-        return deserializer.asNumber(value);
+        return deserializer.asNumber(this, value);
     }
 
     /**
@@ -680,10 +702,10 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @return The value of the json element as long
      * @throws NoSuchElementException If no value is present
-     * @throws ClassCastException If a value is present and is not convertible to a number that can be converted to a long without data loss
+     * @throws TypeMismatchException If a value is present and is not convertible to a number that can be converted to a long without data loss
      */
     public Long asLong() {
-        return deserializer.asLong(value);
+        return deserializer.asLong(this, value);
     }
 
     /**
@@ -691,11 +713,11 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @return The value of the json element as int
      * @throws NoSuchElementException If no value is present
-     * @throws ClassCastException If a value is present and
+     * @throws TypeMismatchException If a value is present and
      *                            is not convertible to a number
      */
     public Integer asInt() {
-        return deserializer.asInt(value);
+        return deserializer.asInt(this, value);
     }
 
     /**
@@ -703,11 +725,11 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @return The value of the json element as double
      * @throws NoSuchElementException If no value is present
-     * @throws ClassCastException If a value is present and
+     * @throws TypeMismatchException If a value is present and
      *                            is not convertible to a number
      */
     public Double asDouble() {
-        return deserializer.asDouble(value);
+        return deserializer.asDouble(this, value);
     }
 
     /**
@@ -715,11 +737,11 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @return The value of the json element as float
      * @throws NoSuchElementException If no value is present
-     * @throws ClassCastException If a value is present and
+     * @throws TypeMismatchException If a value is present and
      *                            is not convertible to a number
      */
     public Float asFloat() {
-        return deserializer.asFloat(value);
+        return deserializer.asFloat(this, value);
     }
 
     /**
@@ -727,81 +749,77 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @return The value of the json element as boolean
      * @throws NoSuchElementException If no value is present
-     * @throws ClassCastException If a value is present and
+     * @throws TypeMismatchException If a value is present and
      *                            is not convertible to a boolean
      */
     public Boolean asBool() {
-        return deserializer.asBool(value);
+        return deserializer.asBool(this, value);
     }
 
 
     /**
-     * Returns {@code true} if this element contains no value or an instance of {@link JsonStructure}.
+     * Returns {@code true} if this element contains no value or convertible to a {@link JsonStructure}.
      *
      * @return Whether this element contains a json structure
      */
     public boolean isStructure() {
-        return value == null || value instanceof JsonStructure;
+        return deserializer.isStructure(this, value);
     }
 
     /**
-     * Returns {@code true} if this element contains no value or an instance of {@link JsonObject}.
+     * Returns {@code true} if this element contains no value or convertible to a {@link JsonObject}.
      *
      * @return Whether this element contains a json object
      */
     public boolean isObject() {
-        return value == null || value instanceof JsonObject;
+        return deserializer.isObject(this, value);
     }
 
     /**
-     * Returns {@code true} if this element contains no value or an instance of {@link JsonArray}.
+     * Returns {@code true} if this element contains no value or convertible to a {@link JsonArray}.
      *
      * @return Whether this element contains a json array
      */
     public boolean isArray() {
-        return value == null || value instanceof JsonArray;
+        return deserializer.isArray(this, value);
     }
 
     /**
-     * Returns {@code true} if this element contains no value or an instance of {@link String}.
+     * Returns {@code true} if this element contains no value or convertible to a {@link String}.
      *
      * @return Whether this element contains a string
      */
     public boolean isString() {
-        return value == null || value instanceof String;
+        return deserializer.isString(this, value);
     }
 
     /**
-     * Returns {@code true} if this element contains no value or an instance of {@code Number}.
+     * Returns {@code true} if this element contains no value or convertible to a {@code Number}.
      *
      * @return Whether this element contains a number
      */
     public boolean isNumber() {
-        return value == null || value instanceof Number;
+        return deserializer.isNumber(this, value);
     }
 
     /**
-     * Returns {@code true} if this element contains no value, an instance of {@link Integer},
-     * {@link Long}, {@link Short} or {@link Byte}, or an instance of {@link Double} or {@link Float}
+     * Returns {@code true} if this element contains no value, convertible to an {@link Integer},
+     * {@link Long}, {@link Short} or {@link Byte}, or convertible to a {@link Double} or {@link Float}
      * which can be converted loss-less to a <code>long</code>.
      *
      * @return Whether this element contains an integer number
      */
     public boolean isInteger() {
-        if(value == null || value instanceof Long || value instanceof Integer
-            || value instanceof Byte || value instanceof Short) return true;
-        if(value instanceof Double || value instanceof Float)
-            return ((Number) value).doubleValue() == ((Number) value).longValue();
-        return false;
+        return deserializer.isInteger(this, value);
     }
 
     /**
-     * Returns {@code true} if this element contains no value or an instance of {@code boolean}.
+     * Returns {@code true} if this element contains no value or convertible to a {@code boolean}.
      *
      * @return Whether this element contains a boolean
      */
     public boolean isBool() {
-        return value == null || value instanceof Boolean;
+        return deserializer.isBool(this, value);
     }
 
 
@@ -814,11 +832,11 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param key The key to get the value for
      * @return The value mapped for the key, or an empty json element
-     * @throws ClassCastException If a value is present and cannot be converted to a {@link JsonObject}
+     * @throws TypeMismatchException If a value is present and cannot be converted to a {@link JsonObject}
      * @throws NullPointerException If the value of this element is {@code null}
      */
     public JsonElement get(String key) {
-        return value != null ? subElement(asObject().get(key)) : EMPTY;
+        return value != null ? deserializer.get(this, value, key) : EMPTY;
     }
 
     /**
@@ -830,14 +848,14 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param index The index to get the value at
      * @return The value at that index, or an empty json element
-     * @throws ClassCastException If a value is present and cannot be converted to a {@link JsonArray}
+     * @throws TypeMismatchException If a value is present and cannot be converted to a {@link JsonArray}
      */
     public JsonElement get(int index) {
         if(value == null) {
             if(index < 0) throw new IndexOutOfBoundsException(index);
             return JsonElement.EMPTY;
         }
-        return subElement(asArray().get(index));
+        return index < size() ? deserializer.get(this, value, index) : EMPTY;
     }
 
     /**
@@ -846,11 +864,11 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * not contain a mapping for that key, <code>null</code> will be returned.
      *
      * @return The structure mapped to the specified key of the contained json object
-     * @throws ClassCastException If a value is present and not convertible to a json object, or
+     * @throws TypeMismatchException If a value is present and not convertible to a json object, or
      *                            the mapped value is not convertible to a json structure
      */
     public JsonStructure getStructure(String key) {
-        return value != null ? (JsonStructure) asObject().get(key) : null;
+        return get(key).asStructure();
     }
 
     /**
@@ -859,11 +877,11 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * not contain such an index, <code>null</code> will be returned.
      *
      * @return The structure mapped at the specified index of the contained json array
-     * @throws ClassCastException If a value is present and not convertible to a json array, or
+     * @throws TypeMismatchException If a value is present and not convertible to a json array, or
      *                            the value at that index is not a json structure
      */
     public JsonStructure getStructure(int index) {
-        return value != null ? (JsonStructure) asArray().get(index) : null;
+        return get(index).asStructure();
     }
 
     /**
@@ -872,11 +890,11 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * not contain a mapping for that key, <code>null</code> will be returned.
      *
      * @return The object mapped to the specified key of the contained json object
-     * @throws ClassCastException If a value is present and not convertible to a json object, or
+     * @throws TypeMismatchException If a value is present and not convertible to a json object, or
      *                            the mapped value is not convertible to a json object
      */
     public JsonObject getObject(String key) {
-        return value != null ? asObject().getObject(key) : null;
+        return get(key).asObject();
     }
 
     /**
@@ -885,11 +903,11 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * not contain such an index, <code>null</code> will be returned.
      *
      * @return The object mapped at the specified index of the contained json array
-     * @throws ClassCastException If a value is present and not convertible to a json array, or
+     * @throws TypeMismatchException If a value is present and not convertible to a json array, or
      *                            the value at that index is not a json object
      */
     public JsonObject getObject(int index) {
-        return value != null ? asArray().getObject(index) : null;
+        return get(index).asObject();
     }
 
     /**
@@ -898,11 +916,11 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * not contain a mapping for that key, <code>null</code> will be returned.
      *
      * @return The array mapped to the specified key of the contained json object
-     * @throws ClassCastException If a value is present and not convertible to a json object, or
+     * @throws TypeMismatchException If a value is present and not convertible to a json object, or
      *                            the mapped value is not convertible to a json array
      */
     public JsonArray getArray(String key) {
-        return value != null ? asObject().getArray(key) : null;
+        return get(key).asArray();
     }
 
     /**
@@ -911,11 +929,11 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * not contain such an index, <code>null</code> will be returned.
      *
      * @return The array mapped at the specified index of the contained json array
-     * @throws ClassCastException If a value is present and not convertible to a json array, or
+     * @throws TypeMismatchException If a value is present and not convertible to a json array, or
      *                            the value at that index is not a json array
      */
     public JsonArray getArray(int index) {
-        return value != null ? asArray().getArray(index) : null;
+        return get(index).asArray();
     }
 
     /**
@@ -924,11 +942,11 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * not contain a mapping for that key, <code>null</code> will be returned.
      *
      * @return The string mapped to the specified key of the contained json object
-     * @throws ClassCastException If a value is present and not convertible to a json object, or
+     * @throws TypeMismatchException If a value is present and not convertible to a json object, or
      *                            the mapped value is not convertible to a string
      */
     public String getString(String key) {
-        return value != null ? asObject().getString(key) : null;
+        return get(key).asString();
     }
 
     /**
@@ -937,11 +955,11 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * not contain such an index, <code>null</code> will be returned.
      *
      * @return The string mapped at the specified index of the contained json array
-     * @throws ClassCastException If a value is present and not convertible to a json array, or
+     * @throws TypeMismatchException If a value is present and not convertible to a json array, or
      *                            the value at that index is not a string
      */
     public String getString(int index) {
-        return value != null ? asArray().getString(index) : null;
+        return get(index).asString();
     }
 
     /**
@@ -950,11 +968,11 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * not contain a mapping for that key, <code>null</code> will be returned.
      *
      * @return The number mapped to the specified key of the contained json object
-     * @throws ClassCastException If a value is present and not convertible to a json object, or
+     * @throws TypeMismatchException If a value is present and not convertible to a json object, or
      *                            the mapped value is not convertible to a number
      */
     public Number getNumber(String key) {
-        return value != null ? (Number) asObject().get(key) : null;
+        return get(key).asNumber();
     }
 
     /**
@@ -963,11 +981,11 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * not contain such an index, <code>null</code> will be returned.
      *
      * @return The number mapped at the specified index of the contained json array
-     * @throws ClassCastException If a value is present and not convertible to a json array, or
+     * @throws TypeMismatchException If a value is present and not convertible to a json array, or
      *                            the value at that index is not a number
      */
     public Number getNumber(int index) {
-        return value != null ? (Number) asArray().get(index) : null;
+        return get(index).asNumber();
     }
 
     /**
@@ -976,12 +994,12 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * not contain a mapping for that key, <code>null</code> will be returned.
      *
      * @return The long mapped to the specified key of the contained json object
-     * @throws ClassCastException If a value is present and not convertible to a json object, or
+     * @throws TypeMismatchException If a value is present and not convertible to a json object, or
      *                            the mapped value is not convertible to a number that can be
      *                            converted to a long without loosing data
      */
     public Long getLong(String key) {
-        return value != null ? asObject().getLong(key) : null;
+        return get(key).asLong();
     }
 
     /**
@@ -990,12 +1008,12 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * not contain such an index, <code>null</code> will be returned.
      *
      * @return The long mapped at the specified index of the contained json array
-     * @throws ClassCastException If a value is present and not convertible to a json array, or
+     * @throws TypeMismatchException If a value is present and not convertible to a json array, or
      *                            the value at that index is not a number that can be
      *                            converted to a long without loosing data
      */
     public Long getLong(int index) {
-        return value != null ? asArray().getLong(index) : null;
+        return get(index).asLong();
     }
 
     /**
@@ -1004,12 +1022,12 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * not contain a mapping for that key, <code>null</code> will be returned.
      *
      * @return The int mapped to the specified key of the contained json object
-     * @throws ClassCastException If a value is present and not convertible to a json object, or
+     * @throws TypeMismatchException If a value is present and not convertible to a json object, or
      *                            the mapped value is not convertible to a number that can be
      *                            converted to an int without loosing data
      */
     public Integer getInt(String key) {
-        return value != null ? asObject().getInt(key) : null;
+        return get(key).asInt();
     }
 
     /**
@@ -1018,12 +1036,12 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * not contain such an index, <code>null</code> will be returned.
      *
      * @return The int mapped at the specified index of the contained json array
-     * @throws ClassCastException If a value is present and not convertible to a json array, or
+     * @throws TypeMismatchException If a value is present and not convertible to a json array, or
      *                            the value at that index is not a number that can be
      *                            converted to an int without loosing data
      */
     public Integer getInt(int index) {
-        return value != null ? asArray().getInt(index) : null;
+        return get(index).asInt();
     }
 
     /**
@@ -1032,12 +1050,12 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * not contain a mapping for that key, <code>null</code> will be returned.
      *
      * @return The double mapped to the specified key of the contained json object
-     * @throws ClassCastException If a value is present and not convertible to a json object, or
+     * @throws TypeMismatchException If a value is present and not convertible to a json object, or
      *                            the mapped value is not convertible to a number that can be
      *                            converted to a double without loosing data
      */
     public Double getDouble(String key) {
-        return value != null ? asObject().getDouble(key) : null;
+        return get(key).asDouble();
     }
 
     /**
@@ -1046,12 +1064,12 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * not contain such an index, <code>null</code> will be returned.
      *
      * @return The double mapped at the specified index of the contained json array
-     * @throws ClassCastException If a value is present and not convertible to a json array, or
+     * @throws TypeMismatchException If a value is present and not convertible to a json array, or
      *                            the value at that index is not a number that can be
      *                            converted to a double without loosing data
      */
     public Double getDouble(int index) {
-        return value != null ? asArray().getDouble(index) : null;
+        return get(index).asDouble();
     }
 
     /**
@@ -1060,12 +1078,12 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * not contain a mapping for that key, <code>null</code> will be returned.
      *
      * @return The float mapped to the specified key of the contained json object
-     * @throws ClassCastException If a value is present and not convertible to a json object, or
+     * @throws TypeMismatchException If a value is present and not convertible to a json object, or
      *                            the mapped value is not convertible to a number that can be
      *                            converted to a float without loosing data
      */
     public Float getFloat(String key) {
-        return value != null ? asObject().getFloat(key) : null;
+        return get(key).asFloat();
     }
 
     /**
@@ -1074,12 +1092,12 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * not contain such an index, <code>null</code> will be returned.
      *
      * @return The float mapped at the specified index of the contained json array
-     * @throws ClassCastException If a value is present and not convertible to a json array, or
+     * @throws TypeMismatchException If a value is present and not convertible to a json array, or
      *                            the value at that index is not a number that can be
      *                            converted to a float without loosing data
      */
     public Float getFloat(int index) {
-        return value != null ? asArray().getFloat(index) : null;
+        return get(index).asFloat();
     }
 
     /**
@@ -1088,11 +1106,11 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * not contain a mapping for that key, <code>null</code> will be returned.
      *
      * @return The boolean value mapped to the specified key of the contained json object
-     * @throws ClassCastException If a value is present and not convertible to a json object, or
+     * @throws TypeMismatchException If a value is present and not convertible to a json object, or
      *                            the mapped value is not convertible to a boolean value
      */
     public Boolean getBool(String key) {
-        return value != null ? asObject().getBool(key) : null;
+        return get(key).asBool();
     }
 
     /**
@@ -1101,11 +1119,11 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * not contain such an index, <code>null</code> will be returned.
      *
      * @return The boolean value mapped at the specified index of the contained json array
-     * @throws ClassCastException If a value is present and not convertible to a json array, or
+     * @throws TypeMismatchException If a value is present and not convertible to a json array, or
      *                            the value at that index is not a boolean value
      */
     public Boolean getBool(int index) {
-        return value != null ? asArray().getBool(index) : null;
+        return get(index).asBool();
     }
 
     /**
@@ -1116,7 +1134,9 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * @return A json element with the value, or empty
      */
     public JsonElement getPath(String path) {
-        return value != null ? asStructure().getPath(path).withDeserializer(deserializer) : EMPTY;
+        return value != null ?
+                of(asStructure().getPath(path).value, deserializer, Json.joinPaths(this.path, path), context) :
+                EMPTY;
     }
 
     /**
@@ -1127,7 +1147,9 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * @return A json element with the value, or empty
      */
     public JsonElement getPath(Object... path) {
-        return value != null ? asStructure().getPath(path).withDeserializer(deserializer) : EMPTY;
+        return value != null ?
+                of(asStructure().getPath(path).value, deserializer, Json.pathToString(this.path, path), context) :
+                EMPTY;
     }
 
     /**
@@ -1155,9 +1177,9 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
     public JsonElement merge(@NotNull JsonElement other) {
         if(value == null)
             return other.withDeserializer(deserializer);
-        if(value instanceof JsonStructure)
-            return subElement(((JsonStructure) value).merge(other.value));
-        if(other.value instanceof JsonStructure)
+        if(isStructure())
+            return replacementElement(asStructure().merge(other.value));
+        if(other.isStructure())
             throw new IllegalArgumentException("Cannot merge "+value.getClass().getSimpleName()+" with "+other.value.getClass().getSimpleName());
         return this;
     }
@@ -1186,7 +1208,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param other The json object to be merged with this one
      * @return A json element representing the merge of this element's object and the given object
-     * @throws ClassCastException If a value is present and is not convertible to a json object
+     * @throws TypeMismatchException If a value is present and is not convertible to a json object
      * @throws IllegalArgumentException If the contained json object cannot be merged with the
      *                                  given object, e.g. because a json structure
      *                                  has to be merged with a primitive (or string)
@@ -1197,7 +1219,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
             asObject();
             return this;
         }
-        return value != null ? subElement(asObject().merge(other)) : subElement(other);
+        return value != null ? replacementElement(asObject().merge(other)) : replacementElement(other);
     }
 
     /**
@@ -1224,7 +1246,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param other The json array to be merged with this one
      * @return A deep copy of this json object with the given json object merged into it
-     * @throws ClassCastException If a value is present and is not convertible to a json array
+     * @throws TypeMismatchException If a value is present and is not convertible to a json array
      * @throws IllegalArgumentException If the contained json array cannot be merged with the
      *                                  given array, e.g. because a json structure
      *                                  has to be merged with a primitive (or string)
@@ -1235,7 +1257,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
             asArray();
             return this;
         }
-        return value != null ? subElement(asArray().merge(other)) : subElement(other);
+        return value != null ? replacementElement(asArray().merge(other)) : replacementElement(other);
     }
 
 
@@ -1254,7 +1276,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param ifNotPresent The value to use if no non-null value is present
      * @return The value of the json element, or the specified value
-     * @throws ClassCastException If a value is present and not convertible to a {@link JsonStructure}
+     * @throws TypeMismatchException If a value is present and not convertible to a {@link JsonStructure}
      */
     public JsonStructure or(JsonStructure ifNotPresent) {
         return value != null ? asStructure() : null;
@@ -1265,7 +1287,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param ifNotPresent The value to use if no non-null value is present
      * @return The value of the json element, or the specified value
-     * @throws ClassCastException If a value is present and not convertible to a {@link JsonObject}
+     * @throws TypeMismatchException If a value is present and not convertible to a {@link JsonObject}
      */
     public JsonObject or(JsonObject ifNotPresent) {
         return value != null ? asObject() : null;
@@ -1276,7 +1298,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param ifNotPresent The value to use if no non-null value is present
      * @return The value of the json element, or the specified value
-     * @throws ClassCastException If a value is present and not convertible to a {@link JsonArray}
+     * @throws TypeMismatchException If a value is present and not convertible to a {@link JsonArray}
      */
     public JsonArray or(JsonArray ifNotPresent) {
         return value != null ? asArray() : null;
@@ -1287,7 +1309,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param ifNotPresent The value to use if no non-null value is present. Must not be null.
      * @return The value of the json element, or the specified value
-     * @throws ClassCastException If a value is present and not convertible to a {@link JsonArray}
+     * @throws TypeMismatchException If a value is present and not convertible to a {@link JsonArray}
      *                            or an element of that array is not convertible to the array's component type
      */
     @SuppressWarnings("unchecked")
@@ -1300,7 +1322,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param ifNotPresent The value to use if no non-null value is present
      * @return The value of the json element, or the specified value
-     * @throws ClassCastException If a value is present and not convertible to a {@link String}
+     * @throws TypeMismatchException If a value is present and not convertible to a {@link String}
      */
     public String or(String ifNotPresent) {
         return value != null ? asString() : ifNotPresent;
@@ -1311,7 +1333,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param ifNotPresent The value to use if no non-null value is present
      * @return The value of the json element, or the specified value
-     * @throws ClassCastException If a value is present and not convertible to an int
+     * @throws TypeMismatchException If a value is present and not convertible to an int
      */
     public int or(int ifNotPresent) {
         return value != null ? asInt() : ifNotPresent;
@@ -1322,7 +1344,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param ifNotPresent The value to use if no non-null value is present
      * @return The value of the json element, or the specified value
-     * @throws ClassCastException If a value is present and not convertible to a long
+     * @throws TypeMismatchException If a value is present and not convertible to a long
      */
     public long or(long ifNotPresent) {
         return value != null ? asLong() : ifNotPresent;
@@ -1333,7 +1355,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param ifNotPresent The value to use if no non-null value is present
      * @return The value of the json element, or the specified value
-     * @throws ClassCastException If a value is present and not convertible to a float
+     * @throws TypeMismatchException If a value is present and not convertible to a float
      */
     public float or(float ifNotPresent) {
         return value != null ? asFloat() : ifNotPresent;
@@ -1344,7 +1366,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param ifNotPresent The value to use if no non-null value is present
      * @return The value of the json element, or the specified value
-     * @throws ClassCastException If a value is present and not convertible to a double
+     * @throws TypeMismatchException If a value is present and not convertible to a double
      */
     public double or(double ifNotPresent) {
         return value != null ? asDouble() : ifNotPresent;
@@ -1355,7 +1377,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param ifNotPresent The value to use if no non-null value is present
      * @return The value of the json element, or the specified value
-     * @throws ClassCastException If a value is present and not convertible to a boolean
+     * @throws TypeMismatchException If a value is present and not convertible to a boolean
      */
     public boolean or(boolean ifNotPresent) {
         return value != null ? asBool() : ifNotPresent;
@@ -1391,7 +1413,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *         value from the supplier
      */
     public Object orGet(Supplier<?> getIfNotPresent) {
-        return value != null ? value : getIfNotPresent;
+        return value != null ? get() : getIfNotPresent;
     }
 
     /**
@@ -1427,7 +1449,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * @return This or an element with the given value / the given element
      */
     public JsonElement orElse(Object ifNotPresent) {
-        return value != null ? this : wrap(ifNotPresent, deserializer);
+        return value != null ? this : wrap(ifNotPresent, deserializer).withContextOf(this);
     }
 
     /**
@@ -1439,7 +1461,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * @return This or the supplied value / element
      */
     public JsonElement orElseGet(Supplier<?> getIfNotPresent) {
-        return value != null ? this : wrap(getIfNotPresent.get(), deserializer);
+        return value != null ? this : wrap(getIfNotPresent.get(), deserializer).withContextOf(this);
     }
 
 
@@ -1473,18 +1495,55 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
 
 
     /**
-     * Returns an iterator iterating over the elements of the
+     * Returns an iterator iterating over the non-null elements of the
      * json array contained in this element. If no value is present, an empty
      * iterator will be returned.
      *
      * @return An iterator over the element of the contained array
-     * @throws ClassCastException If an element is present, but it
+     * @throws TypeMismatchException If an element is present, but it
      *                            is not a json array
      */
     @NotNull
     @Override
     public Iterator<JsonElement> iterator() {
-        return value != null ? asArray().elements() : IterableIterator.empty();
+        Iterator<JsonElement> it = nullableElements().iterator();
+        return new Iterator<JsonElement>() {
+            JsonElement next = null;
+            @Override
+            public boolean hasNext() {
+                getNext();
+                return next != null;
+            }
+
+            @Override
+            public JsonElement next() {
+                getNext();
+                if(next == null)
+                    throw new NoSuchElementException();
+                JsonElement res = next;
+                next = null;
+                return res;
+            }
+
+            public void getNext() {
+                while((next == null || next.value == null) && it.hasNext())
+                    next = it.next();
+            }
+        };
+    }
+
+    /**
+     * Returns an iterable iterating over the elements of the
+     * json array contained in this element, including <code>null</code> entries.
+     * If no value is present, an empty iterator will be returned.
+     *
+     * @return An iterator over the element of the contained array
+     * @throws TypeMismatchException If an element is present, but it
+     *                            is not a json array
+     */
+    public Iterable<JsonElement> nullableElements() {
+        if(value == null) return IterableIterator.empty();
+        return deserializer.elements(this, value);
     }
 
     /**
@@ -1492,11 +1551,12 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * If no value is present, an empty iterator will be returned.
      *
      * @return The keys of the contained object
-     * @throws ClassCastException If a value is present, but is not a json object
+     * @throws TypeMismatchException If a value is present, but is not a json object
      */
     @NotNull
     public Set<String> keySet() {
-        return value != null ? asObject().keySet() : Set.of();
+        if(value == null) return Set.of();
+        return deserializer.keySet(this, value);
     }
 
     /**
@@ -1504,12 +1564,12 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * If no value is present, an empty iterator will be returned.
      *
      * @return The non-null values of the contained object
-     * @throws ClassCastException If a value is present, but is not a json object
+     * @throws TypeMismatchException If a value is present, but is not convertible to a json object
      */
     @NotNull
     public Collection<JsonElement> values() {
         if(value == null) return List.of();
-        return asObject().values().stream().filter(Objects::nonNull).map(this::subElement).collect(Collectors.toList());
+        return deserializer.values(this, value);
     }
 
     /**
@@ -1517,12 +1577,12 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * this element. If no value is present, the stream will be empty.
      *
      * @return A stream over the elements of the contained array
-     * @throws ClassCastException If an element is present, but it is not
-     *                            a json array
+     * @throws TypeMismatchException If an element is present, but it is not convertible to a json array
      */
     @NotNull
     public Stream<JsonElement> stream() {
-        return value == null ? Stream.empty() : asArray().stream().filter(Objects::nonNull).map(this::subElement);
+        if(value == null) return Stream.empty();
+        return deserializer.stream(this, value);
     }
 
     /**
@@ -1530,11 +1590,11 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * 0 will be returned.
      *
      * @return The size of the contained structure
-     * @throws ClassCastException If an element is present, but it is
+     * @throws TypeMismatchException If an element is present, but it is
      *                            not a json structure
      */
     public int size() {
-        return value != null ? asStructure().size() : 0;
+        return value != null ? deserializer.size(this, value) : 0;
     }
 
     /**
@@ -1546,7 +1606,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * @param o The object to check for containment for
      * @return Whether the contained json structure contains the
      *         specified element
-     * @throws ClassCastException If an element is present, but it
+     * @throws TypeMismatchException If an element is present, but it
      *                            is not a json structure
      */
     public boolean contains(Object o) {
@@ -1560,11 +1620,11 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      *
      * @param key The key to check for containment for
      * @return Whether the contained json object contains the key or index
-     * @throws ClassCastException If an element is present, but it
+     * @throws TypeMismatchException If an element is present, but it
      *                            is not a json object
      */
     public boolean containsKey(String key) {
-        return value != null && asObject().containsKey(key);
+        return value != null && keySet().contains(key);
     }
 
     /**
@@ -1576,7 +1636,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * @param o The object to check for containment for
      * @return Whether the contained json structure contains the
      *         specified element
-     * @throws ClassCastException If an element is present, but it
+     * @throws TypeMismatchException If an element is present, but it
      *                            is not a json structure
      */
     public boolean containsValue(Object o) {
@@ -1591,7 +1651,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      */
     @Override
     public String toString() {
-        return Objects.toString(value);
+        return Objects.toString(get());
     }
 
     /**
@@ -1599,15 +1659,55 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * is present, no elements will be iterated.
      *
      * @param action The action to perform on each non-null key-value-pair
-     * @throws ClassCastException If a value is present, but
+     * @throws TypeMismatchException If a value is present, but
      *                            it is not a json object
      */
     public void forEach(BiConsumer<? super String, ? super JsonElement> action) {
-        if(value == null) return;
-        asObject().forEach((k,v) -> {
-            if(v != null)
-                action.accept(k, subElement(v));
+        forEachNullable((k,v) -> {
+            if(v.isPresent())
+                action.accept(k,v);
         });
+    }
+
+    /**
+     * Iterates over all entries of this json object, including <code>null</code> values. If no value
+     * is present, no elements will be iterated.
+     *
+     * @param action The action to perform on each non-null key-value-pair
+     * @throws TypeMismatchException If a value is present, but
+     *                            it is not a json object
+     */
+    public void forEachNullable(BiConsumer<? super String, ? super JsonElement> action) {
+        if(value == null) return;
+        deserializer.forEach(this, value, action);
+    }
+
+    /**
+     * Iterates over all non-null elements in this json array. If no value is present, no elements
+     * will be iterated.
+     *
+     * @param action The action to perform in each non-null entry
+     * @throws TypeMismatchException If a value is present but is not convertible to a json array
+     */
+    @Override
+    public void forEach(Consumer<? super JsonElement> action) {
+        if(value == null) return;
+        for(JsonElement e : this)
+            if(e.isPresent())
+                action.accept(e);
+    }
+
+    /**
+     * Iterates over all elements in this json array, including <code>null</code> values. If no
+     * value is present, no elements will be iterated.
+     *
+     * @param action The action to perform in each entry
+     * @throws TypeMismatchException If a value is present but is not convertible to a json array
+     */
+    public void forEachNullable(Consumer<? super JsonElement> action) {
+        if(value == null) return;
+        for(JsonElement e : this)
+            action.accept(e);
     }
 
     /**
@@ -1625,15 +1725,19 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
     }
 
     public static JsonElement wrap(Object o, JsonDeserializer deserializer) {
-        return of(Json.serialize(o), deserializer, null);
+        return of(Json.serialize(o), deserializer, "", null);
     }
 
-    private JsonElement subElement(Object o) {
-        return of(o, deserializer, context);
+    JsonElement subElement(Object field, Object o) {
+        return of(o, deserializer, Json.appendToPath(path, field), context);
     }
 
-    private static JsonElement of(Object o, JsonDeserializer deserializer, GenericContext context) {
-        return o != null || context != null ? new JsonElement(o, deserializer, context) : EMPTY;
+    private JsonElement replacementElement(Object o) {
+        return of(o, deserializer, path, context);
+    }
+
+    private static JsonElement of(Object o, JsonDeserializer deserializer, String path, GenericContext context) {
+        return o != null || context != null ? new JsonElement(o, deserializer, path, context) : EMPTY;
     }
 
 

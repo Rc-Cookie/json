@@ -4,20 +4,25 @@ import java.lang.reflect.Type;
 
 public class JsonDeserializationException extends RuntimeException {
 
-    private final JsonElement json;
-    private final Type targetType;
+    public JsonDeserializationException() { }
 
-    public JsonDeserializationException(JsonElement json, Type targetType, Throwable cause) {
-        super("Failed to deserialize json '" + (json.isArray()?"[...]":json.isObject()?"{...}":Json.toString(json, false)) + "' to " + (targetType instanceof Class ? ((Class<?>) targetType).getSimpleName() : targetType.getTypeName()), cause);
-        this.json = json;
-        this.targetType = targetType;
+    public JsonDeserializationException(String message) {
+        super(message);
     }
 
-    public JsonElement json() {
-        return json;
+    public JsonDeserializationException(String message, Throwable cause) {
+        super(message, cause);
     }
 
-    public final Type targetType() {
-        return targetType;
+    public JsonDeserializationException(Throwable cause) {
+        super(cause);
+    }
+
+    public JsonDeserializationException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+        super(message, cause, enableSuppression, writableStackTrace);
+    }
+
+    protected static String typeString(Type type) {
+        return type instanceof Class<?> ? ((Class<?>) type).getSimpleName() : type.getTypeName();
     }
 }

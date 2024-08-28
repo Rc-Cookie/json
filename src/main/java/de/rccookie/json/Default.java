@@ -6,9 +6,10 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Specifies a default value for the annotated constructor parameter, overriding the
- * standard default value of <code>null</code> when the specified parameter is not present
- * in the json structure being deserialized.
+ * Specifies a default value for the annotated constructor parameter or the annotated field,
+ * overriding the standard default value (<code>null</code> for objects, an exception will be
+ * thrown for primitives) when the specified parameter is not present in the json structure
+ * being deserialized.
  * <p>Each parameter will be treated as json string and deserialized into the expected
  * parameter type using its standard deserializer. This especially includes <code>null</code>,
  * numbers, strings (need to be enquoted within the string, or set {@link #string()} to
@@ -17,7 +18,7 @@ import java.lang.annotation.Target;
  * json deserialization.</p>
  */
 @Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.PARAMETER)
+@Target({ElementType.PARAMETER, ElementType.FIELD})
 public @interface Default {
 
     /**

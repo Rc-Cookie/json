@@ -40,8 +40,7 @@ public class JsonObject implements Map<String, Object>, JsonStructure {
      * @param copy The map describing the mappings to do.
      */
     public JsonObject(Map<?,?> copy) {
-        for(Map.Entry<?,?> e : copy.entrySet())
-            put(Objects.toString(Objects.requireNonNull(e.getKey(), "Json objects don't permit 'null' as key")), e.getValue());
+        copy.forEach((k,v) -> put(Objects.toString(Objects.requireNonNull(k, "Json objects don't permit 'null' as key")), v));
     }
 
     /**
@@ -283,6 +282,24 @@ public class JsonObject implements Map<String, Object>, JsonStructure {
         if(otherStructure != null && !(otherStructure instanceof JsonObject))
             throw new IllegalArgumentException("Cannot merge JsonObject and "+otherStructure.getClass().getSimpleName());
         return merge((JsonObject) otherStructure);
+    }
+
+    @Override
+    public JsonStructure filter(@Nullable Object filter, boolean allowMissing) {
+        if(!(filter instanceof JsonObject))
+            return this;
+
+        JsonObject filtered = new JsonObject();
+        ((JsonObject) filter).forEach((k,v) -> {
+            if(!containsKey(k)) {
+                if(!allowMissing)
+                    throw new IllegalArgumentException("Key '"+k+"' from filter does not exist in data");
+                return;
+            }
+            Object val = get(k);
+            filtered.put(k, val instanceof JsonStructure ? ((JsonStructure) val).filter(v, allowMissing) : val);
+        });
+        return filtered;
     }
 
     /**

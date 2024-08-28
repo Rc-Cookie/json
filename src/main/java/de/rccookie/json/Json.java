@@ -23,6 +23,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.regex.Pattern;
 
 /**
  * Utility class for parsing and writing json.
@@ -98,6 +100,21 @@ public final class Json {
         StringWriter writer = new StringWriter();
         write(object, writer, formatted);
         return writer.toString();
+    }
+
+    /**
+     * Converts the given object to a json string. Any objects that
+     * are not a valid json type (Maps (no null keys!), Lists and arrays,
+     * numbers, booleans, Strings) will be represented as if they were
+     * strings with their {@code toString()} value.
+     *
+     * @param object The object to convert
+     * @param formatted Weather the json string should be formatted
+     *                  with indents and newlines
+     * @return The json string representing the object
+     */
+    public static String toString(Object object, boolean formatted, JsonSerializer serializer) {
+        return usingSerializer(serializer, () -> toString(object, formatted));
     }
 
     /**
@@ -412,6 +429,18 @@ public final class Json {
         printWriter.flush();
     }
 
+    /**
+     * Writes the given value as json into the given writer.
+     *
+     * @param value The value to write
+     * @param writer The writer to write into
+     * @param formatted Whether the output should be formatted with
+     *                  newlines and indents
+     */
+    public static void write(Object value, Writer writer, boolean formatted, JsonSerializer serializer) {
+        usingSerializer(serializer, () -> write(value, writer, formatted));
+    }
+
 
     // ---------- Configuration ----------
 
@@ -528,6 +557,42 @@ public final class Json {
     }
 
     /**
+     * Converts the given object to an appropriate raw json type.
+     *
+     * @param object The object to convert
+     * @param serializer The serializer to use to serialize the data
+     * @return A json value representing the input
+     * @throws IllegalJsonTypeException If the type cannot be
+     *                                  converted to a json value
+     */
+    public static Object serialize(Object object, JsonSerializer serializer) {
+        return usingSerializer(serializer, () -> serialize(object));
+    }
+
+    /**
+     * Runs the given code while using the specified serializer for any serialization
+     * performed within that code.
+     *
+     * @param serializer The serializer to use
+     * @param code The code to run with the serializer set
+     * @return The return value from the code to run
+     */
+    public static <T> T usingSerializer(JsonSerializer serializer, Supplier<T> code) {
+        return JsonSerialization.usingSerializer(serializer, code);
+    }
+
+    /**
+     * Runs the given code while using the specified serializer for any serialization
+     * performed within that code.
+     *
+     * @param serializer The serializer to use
+     * @param code The code to run with the serializer set
+     */
+    public static void usingSerializer(JsonSerializer serializer, Runnable code) {
+        usingSerializer(serializer, () -> { code.run(); return null; });
+    }
+
+    /**
      * Deserialized the given json data into an object of the specified type. In general
      * {@link JsonElement#as(Class)} should be preferred over using this method directly.
      *
@@ -598,19 +663,20 @@ public final class Json {
                 blacklist.add(l);
                 out.print('[');
 
+                boolean formatLocal = formatted && l.size() != 1;
                 int i = l.size();
-                for (Object e : l) {
+                for(Object e : l) {
                     if(blacklist.contains(e))
                         throw new NestedJsonException();
-                    if(formatted) {
+                    if(formatLocal) {
                         out.println();
                         out.print(repeat(INDENT, level + 1));
                     }
-                    Json.printStringFor(out, e, blacklist, formatted, level + 1);
+                    Json.printStringFor(out, e, blacklist, formatted, level + (formatLocal ? 1 : 0));
                     if(--i != 0) out.print(',');
                 }
 
-                if(formatted) {
+                if(formatLocal) {
                     out.println();
                     out.print(repeat(INDENT, level));
                 }
@@ -661,6 +727,48 @@ public final class Json {
      */
     static Object[] parsePath(String path) {
         return (path.startsWith("[") ? path.substring(1) : path).replace("]", "").split("[\\[.]");
+    }
+
+    private static final Pattern PATH_FIELD_PATTERN = Pattern.compile("[a-zA-Z_$][a-zA-Z_$0-9]*");
+
+    static String pathToString(String prefix, Object[] path) {
+        StringBuilder str = new StringBuilder(prefix);
+        for(Object o : path) {
+            if(o instanceof Number)
+                str.append('[').append(o).append(']');
+            else if(!(o instanceof CharSequence) || !PATH_FIELD_PATTERN.matcher((CharSequence) o).matches())
+                str.append('[').append(escape(o)).append(']');
+            else {
+                if(str.length() != 0 && str.charAt(str.length() - 1) == ']')
+                    str.append('.');
+                str.append((CharSequence) o);
+            }
+        }
+        return str.toString();
+    }
+
+    static String appendToPath(String path, Object o) {
+        if(o instanceof Number)
+            return path+"["+o+"]";
+        if(!(o instanceof CharSequence) || !PATH_FIELD_PATTERN.matcher((CharSequence) o).matches())
+            return path+"["+escape(o)+"]";
+        else return path + (path.isEmpty() ? "" : ".") + o;
+    }
+
+    static String prependToPath(String path, Object o) {
+        if(path == null)
+            path = "";
+        if(o instanceof Number)
+            return "["+o+"]"+path;
+        if(!(o instanceof CharSequence) || !PATH_FIELD_PATTERN.matcher((CharSequence) o).matches())
+            return "["+escape(o)+"]"+path;
+        else return o + (path.isEmpty() || path.charAt(0) == '[' ? "" : ".") + path;
+    }
+
+    static String joinPaths(String a, String b) {
+        if(a == null) a = "";
+        if(b == null) b = "";
+        return a + (a.isEmpty() || b.isEmpty() || b.startsWith("[") ? "" : ".") + b;
     }
 
     static String repeat(String str, int times) {

@@ -18,7 +18,7 @@ public interface TypeBuilder extends Type {
     }
 
 
-    static TypeBuilder type(Class<?> rawType, Type... typeParameters) {
+    static TypeBuilder generic(Class<?> rawType, Type... typeParameters) {
         if(typeParameters.length == 0)
             throw new IllegalArgumentException("Generic type parameter required");
         return new ParameterizedTypeImpl(rawType, typeParameters, null);

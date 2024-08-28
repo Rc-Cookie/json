@@ -223,6 +223,60 @@ public interface JsonStructure extends Cloneable {
     JsonStructure merge(@Nullable Object otherStructure);
 
     /**
+     * Returns a json structure (possibly this one) only containing the fields
+     * from the given filter.
+     *
+     * <p>If this is a json array, the filter will be applied to each element
+     * of the array. If this is a json object and the filter is <i>not</i> a
+     * json object, the json object itself will be returned. Otherwise only those
+     * fields will be kept which are also present in the filter object. If the
+     * value of a kept field is another json structure, the value in the filter
+     * for that element will be used to recursively filter that structure.
+     * Otherwise, the values in the filter object can be arbitrary (or even
+     * <code>null</code>), just the presence of the key matters.</p>
+     *
+     * <p>Example:</p>
+     * <pre>
+     * data = [
+     *     {
+     *         "hello": "world",
+     *         "object": { "a": 1, "b": 2 }
+     *     },
+     *     {
+     *         "hello", 42,
+     *         "object": { "a": 1 },
+     *         "key": "value"
+     *     }
+     * ]
+     * filter = {
+     *     "hello": true,
+     *     "object": { "b": "The value is insignificant" }
+     * }
+     * data.filter(filter, true) = [
+     *     {
+     *         "hello": "world",
+     *         "object": { "b": 2 }
+     *     },
+     *     {
+     *         "hello": 42,
+     *         "object": { }
+     *     }
+     * ]
+     * data.filter(filter, false) = IllegalArgumentException: Key 'b' from filter does not exist in data
+     * </pre>
+     *
+     * @param filter The filter to apply recursively to this structure
+     * @param allowMissing Whether to throw an exception if the filter contains a field
+     *                       which the filtered json object does not contain. Otherwise,
+     *                       this will just be ignored, as in the example above.
+     * @return The filtered object, possibly this instance
+     * @throws IllegalArgumentException If <code>allowMissing</code> is <code>false</code> and
+     *                                  the filter contains a key which is not present in the filtered
+     *                                  data object.
+     */
+    JsonStructure filter(@Nullable Object filter, boolean allowMissing);
+
+    /**
      * Returns a {@link JsonElement} with the value mapped at the specified
      * path, or an empty json element if that value does not exist.
      *
