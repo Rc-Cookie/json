@@ -23,6 +23,8 @@ public class JsonDeserializationException extends RuntimeException {
     }
 
     protected static String typeString(Type type) {
+        if(type == null)
+            return "null";
         return type instanceof Class<?> ? ((Class<?>) type).getSimpleName() : type.getTypeName();
     }
 }

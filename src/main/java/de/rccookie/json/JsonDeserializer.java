@@ -75,11 +75,11 @@ public abstract class JsonDeserializer {
     }
 
     protected <T> T assertType(JsonElement context, Object value, Class<T> type) throws TypeMismatchException {
-        if(value == null)
-            return null;
-        if(!type.isInstance(value))
-            throw new TypeMismatchException(context.path(), type, value.getClass());
-        return type.cast(value);
+        try {
+            return Json.cast(value, type, context);
+        } catch(ClassCastException|NullPointerException e) {
+            throw new TypeMismatchException(context.path(), type, value != null ? value.getClass() : null);
+        }
     }
 
     /**

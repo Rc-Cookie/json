@@ -119,27 +119,41 @@ final class JsonSerialization {
     // Default serializers and deserializers
     static {
         DESERIALIZERS.put(Boolean.class,         JsonElement::asBool);
-        DESERIALIZERS.put(boolean.class,         JsonElement::asBool);
+        DESERIALIZERS.put(boolean.class,         new PrimitiveDeserializer<>(boolean.class, JsonElement::asBool));
         DESERIALIZERS.put(Number.class,          JsonElement::asNumber);
         DESERIALIZERS.put(Byte.class,            j -> j.asNumber().byteValue());
-        DESERIALIZERS.put(byte.class,            j -> j.asNumber().byteValue());
+        DESERIALIZERS.put(byte.class,            new PrimitiveDeserializer<>(byte.class, j -> Json.cast(j.asNumber(), byte.class, j)));
         DESERIALIZERS.put(Short.class,           j -> j.asNumber().shortValue());
-        DESERIALIZERS.put(short.class,           j -> j.asNumber().shortValue());
+        DESERIALIZERS.put(short.class,            new PrimitiveDeserializer<>(short.class, j -> Json.cast(j.asNumber(), short.class, j)));
         DESERIALIZERS.put(Integer.class,         JsonElement::asInt);
-        DESERIALIZERS.put(int.class,             JsonElement::asInt);
+        DESERIALIZERS.put(int.class,             new PrimitiveDeserializer<>(int.class, JsonElement::asInt));
         DESERIALIZERS.put(Long.class,            JsonElement::asLong);
-        DESERIALIZERS.put(long.class,            JsonElement::asLong);
+        DESERIALIZERS.put(long.class,            new PrimitiveDeserializer<>(long.class, JsonElement::asLong));
         DESERIALIZERS.put(Float.class,           JsonElement::asFloat);
-        DESERIALIZERS.put(float.class,           JsonElement::asFloat);
+        DESERIALIZERS.put(float.class,           new PrimitiveDeserializer<>(float.class, JsonElement::asFloat));
         DESERIALIZERS.put(Double.class,          JsonElement::asDouble);
-        DESERIALIZERS.put(double.class,          JsonElement::asDouble);
+        DESERIALIZERS.put(double.class,          new PrimitiveDeserializer<>(double.class, JsonElement::asDouble));
         DESERIALIZERS.put(String.class,          JsonElement::asString);
         DESERIALIZERS.put(JsonStructure.class,   JsonElement::asStructure);
         DESERIALIZERS.put(JsonObject.class,      JsonElement::asObject);
         DESERIALIZERS.put(JsonArray.class,       JsonElement::asArray);
         DESERIALIZERS.put(JsonElement.class,     j -> j);
-        DESERIALIZERS.put(Character.class,       j -> j.asString().charAt(0));
-        DESERIALIZERS.put(char.class,            j -> j.asString().charAt(0));
+        DESERIALIZERS.put(Character.class,       j -> {
+            String str = j.asString();
+            if(str == null || str.isEmpty())
+                return null;
+            if(str.length() != 1)
+                throw new TypeMismatchException(j.path(), "Cannot convert String to char: String is not of length 1");
+            return str.charAt(0);
+        });
+        DESERIALIZERS.put(char.class,            new PrimitiveDeserializer<>(char.class, j -> {
+            String str = j.asString();
+            if(str == null)
+                return null;
+            if(str.length() != 1)
+                throw new TypeMismatchException(j.path(), "Cannot convert String to char: String is not of length 1");
+            return str.charAt(0);
+        }));
         registerSerializer(Character.class,      c -> c+"");
         registerSerializer(char.class,           c -> c+"");
 
@@ -422,6 +436,25 @@ final class JsonSerialization {
                 j.get("months").asInt(),
                 j.get("days").asInt()
         ));
+    }
+
+    private static final class PrimitiveDeserializer<T> implements Function<JsonElement,T> {
+
+        private final Class<T> primitiveType;
+        private final Function<JsonElement,T> deserializer;
+
+        private PrimitiveDeserializer(Class<T> primitiveType, Function<JsonElement,T> deserializer) {
+            this.primitiveType = primitiveType;
+            this.deserializer = deserializer;
+        }
+
+        @Override
+        public T apply(JsonElement jsonElement) {
+            T val = deserializer.apply(jsonElement);
+            if(val == null)
+                throw new TypeMismatchException(jsonElement.path(), primitiveType, null);
+            return val;
+        }
     }
 
 

@@ -26,6 +26,8 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
+import de.rccookie.util.Cast;
+
 /**
  * Utility class for parsing and writing json.
  *
@@ -777,5 +779,13 @@ public final class Json {
         for(int i=0; i<times; i++)
             out.append(str);
         return out.toString();
+    }
+
+    static <T> T cast(Object o, Class<T> type, JsonElement context) {
+        try {
+            return Cast.to(o, type);
+        } catch(ClassCastException|NullPointerException e) {
+            throw new TypeMismatchException(context.path(), type, o != null ? o.getClass() : null, e);
+        }
     }
 }

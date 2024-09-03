@@ -270,7 +270,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * @throws JsonDeserializationException If this json element could not be deserialized to the given type
      */
     public <T> T as(Class<T> type) {
-        return type.cast(as((Type) type));
+        return Json.cast(as((Type) type), type, this);
     }
 
     /**
@@ -291,7 +291,7 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      */
     @SuppressWarnings("unchecked")
     public <T> T as(Class<? super T> rawType, Type... typeParameters) {
-        return (T) rawType.cast(as(type(rawType, typeParameters)));
+        return (T) Json.cast(as(type(rawType, typeParameters)), rawType, this);
     }
 
     private static Type type(Class<?> rawType, Type... typeParameters) {
@@ -352,6 +352,10 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * Returns an array containing all elements of the {@link JsonArray} contained
      * in this json element, each deserialized to the specified type.
      *
+     * <p>Only supported for non-primitive content types (primitive arrays cannot be cast to
+     * Object[] and thus cannot be returned by this method). Use <code>as(type[])</code>
+     * for those instead.</p>
+     *
      * @param contentType The type to deserialize the elements to
      * @return The json array deserialized to an array, or an empty array
      * @throws TypeMismatchException If a value is present and is not convertible to a json array
@@ -365,19 +369,9 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      * Returns an array containing all elements of the {@link JsonArray} contained
      * in this json element, each deserialized to the specified type.
      *
-     * @param contentType The type to deserialize the elements to
-     * @return The json array deserialized to an array, or an empty array
-     * @throws TypeMismatchException If a value is present and is not convertible to a json array
-     */
-    @SuppressWarnings({"unchecked", "RedundantCast"})
-    @NotNull
-    public <T> T[] asArray(Class<? super T> contentType, Type... typeParameters) {
-        return (T[]) as(contentType, type(Objects.requireNonNull(contentType, "contentType"), Objects.requireNonNull(typeParameters, "typeParameters")));
-    }
-
-    /**
-     * Returns an array containing all elements of the {@link JsonArray} contained
-     * in this json element, each deserialized to the specified type.
+     * <p>Only supported for non-primitive content types (primitive arrays cannot be cast to
+     * Object[] and thus cannot be returned by this method). Use <code>as(type[])</code>
+     * for those instead.</p>
      *
      * @param contentType The type to deserialize the elements to
      * @return The json array deserialized to an array, or an empty array
@@ -385,13 +379,35 @@ public class JsonElement implements Iterable<JsonElement>, JsonSerializable {
      */
     @SuppressWarnings({"unchecked", "RedundantCast"})
     @NotNull
+    public <T> T[] asArray(Class<? super T> contentType, Type... typeParameters) {
+        if(Objects.requireNonNull(typeParameters, "typeParameters").length == 0)
+            return (T[]) asArray(contentType);
+        return (T[]) asArray(TypeBuilder.generic(Objects.requireNonNull(contentType, "contentType"), typeParameters));
+    }
+
+    /**
+     * Returns an array containing all elements of the {@link JsonArray} contained
+     * in this json element, each deserialized to the specified type.
+     *
+     * <p>Only supported for non-primitive content types (primitive arrays cannot be cast to
+     * Object[] and thus cannot be returned by this method). Use <code>as(type[])</code>
+     * for those instead.</p>
+     *
+     * @param contentType The (non-primitive) type to deserialize the elements to
+     * @return The json array deserialized to an array, or an empty array
+     * @throws TypeMismatchException If a value is present and is not convertible to a json array
+     */
+    @SuppressWarnings({"unchecked", "RedundantCast"})
+    @NotNull
     public <T> T[] asArray(Type contentType) {
-        return (T[]) as(resolveRawType(Objects.requireNonNull(contentType, "contentType")), contentType);
+        return (T[]) as(TypeBuilder.array(Objects.requireNonNull(contentType, "contentType")));
     }
 
     @SuppressWarnings("unchecked")
     @NotNull
     private <T> T[] asArray0(Class<? super T> contentType, Type genericContentType) {
+        if(contentType.isPrimitive())
+            throw new IllegalArgumentException("asArray() may not be used with primitive content types, use as("+contentType.getName()+"[].class) instead");
         if(value == null)
             return (T[]) Array.newInstance(contentType, 0);
         T[] arr = (T[]) Array.newInstance(contentType, size());
